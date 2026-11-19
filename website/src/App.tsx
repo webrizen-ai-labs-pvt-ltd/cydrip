@@ -1,10 +1,9 @@
-import { lazy, Suspense, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 
 import { Mark } from './components/Mark';
+import { CHAPTERS, Stage } from './components/Stage';
+import { DashWidget, MapWidget, RingsWidget, SnapWidget } from './components/Widgets';
 import { trackScroll } from './scene/scroll';
-
-// three.js is big; the page text renders first and the scene streams in behind it.
-const Scene = lazy(() => import('./scene/Scene').then((m) => ({ default: m.Scene })));
 
 const REPO = 'https://github.com/webrizen-ai-labs-pvt-ltd/cydrip';
 const DOWNLOAD = `${REPO}/releases/latest`;
@@ -18,53 +17,77 @@ const SCREENSHOTS = [
   ['6-offline', 'Works offline too'],
 ] as const;
 
-const STEPS = [
-  {
-    title: 'Download the APK',
-    body: (
-      <>
-        Get the latest version from <a href={DOWNLOAD}>GitHub Releases</a> on your Android phone.
-      </>
-    ),
-  },
-  { title: 'Open it', body: 'Android asks you to allow installs from your browser the first time. Allow it, then tap Install.' },
-  {
-    title: 'Allow location while using the app',
-    body: "That's all CyDrip needs. If your phone closes apps in the background, set its battery use to Unrestricted.",
-  },
-];
-
-/** Shown instead of the WebGL scene when the browser can't run it. */
-function StillAura() {
+function DownloadIcon() {
   return (
-    <div className="fallback">
-      <Mark className="fallback-mark" />
-    </div>
+    <svg viewBox="0 0 20 20" aria-hidden="true">
+      <path d="M10 3v10m0 0-4-4m4 4 4-4M4 16h12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   );
 }
 
-function DownloadButton() {
+function Download({ label = 'Download for Android' }: { label?: string }) {
   return (
-    <a className="btn btn-primary" href={DOWNLOAD}>
-      Download for Android
+    <a className="pill pill-dark" href={DOWNLOAD}>
+      {label}
+      <DownloadIcon />
     </a>
   );
 }
 
+/** Label on the left, value on the right, hairline between rows. */
+function Specs({ rows }: { rows: [string, string][] }) {
+  return (
+    <dl className="specs">
+      {rows.map(([k, v]) => (
+        <div key={k}>
+          <dt>{k}</dt>
+          <dd>{v}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+function ChapterHead({ index }: { index: number }) {
+  return (
+    <div className="chapter-head">
+      <span>
+        {String(index + 1).padStart(2, '0')} / {String(CHAPTERS.length).padStart(2, '0')}
+      </span>
+      <span>{CHAPTERS[index]}</span>
+    </div>
+  );
+}
+
+/** Which chapter sits in the middle of the viewport, for the stage's counter. */
+function useActiveChapter() {
+  const [active, setActive] = useState(0);
+  useEffect(() => {
+    const io = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((e) => {
+          if (e.isIntersecting) setActive(Number((e.target as HTMLElement).dataset.chapter));
+        });
+      },
+      { rootMargin: '-45% 0px -45% 0px' },
+    );
+    document.querySelectorAll('[data-chapter]').forEach((el) => io.observe(el));
+    return () => io.disconnect();
+  }, []);
+  return active;
+}
+
 export default function App() {
   useEffect(() => trackScroll(), []);
+  const chapter = useActiveChapter();
 
   return (
-    <>
-      <Suspense fallback={<StillAura />}>
-        <Scene fallback={<StillAura />} />
-      </Suspense>
-
+    <div className="page">
       <a className="skip" href="#main">
         Skip to content
       </a>
 
-      <header className="nav">
+      <header className="bar">
         <a className="brand" href="/" aria-label="CyDrip home">
           <Mark className="brand-mark" />
           <span>CyDrip</span>
@@ -72,88 +95,171 @@ export default function App() {
         <nav aria-label="Main">
           <a href="#ride">Ride</a>
           <a href="#run">Run</a>
+          <a href="#inside">Inside</a>
           <a href="#install">Install</a>
           <a href={REPO}>GitHub</a>
         </nav>
+        <Download label="Download" />
       </header>
 
       <main id="main">
-        {/* Stage 0: seven triangles orbit the aura. */}
-        <section className="panel hero" data-stage="0" data-aura="1,0,0">
-          <div className="hero-copy">
-            <h1>Your handlebar, as an instrument cluster.</h1>
-            <p className="lede">
-              A free, open-source ride and run tracker for Android. Big live numbers, a 3D map of the streets around
-              you, and GPS that keeps recording with the screen off.
-            </p>
-            <div className="cta">
-              <DownloadButton />
-              <a className="btn btn-quiet" href={REPO}>
-                View the source
-              </a>
+        {/* The story: chapters on the left, the live scene framed on the right. */}
+        <section className="story">
+          <div className="chapters">
+            <article className="chapter chapter-hero" data-chapter="0" data-stage="0" data-aura="1,0,0">
+              <ChapterHead index={0} />
+              <h1>Your handlebar, as an instrument cluster.</h1>
+              <p className="lede">
+                CyDrip is a free, open-source ride and run tracker for Android. Big live numbers, a 3D map of the
+                streets around you, and GPS that keeps recording with the screen off.
+              </p>
+              <div className="actions">
+                <Download />
+                <a className="pill pill-light" href={REPO}>
+                  View the source
+                </a>
+              </div>
+              <div className="meta">
+                <div>
+                  <small>Price</small>
+                  <b>Free</b>
+                </div>
+                <div>
+                  <small>Account</small>
+                  <b>None</b>
+                </div>
+                <div>
+                  <small>Licence</small>
+                  <b>MIT</b>
+                </div>
+                <div>
+                  <small>Version</small>
+                  <b>1.1.0</b>
+                </div>
+              </div>
+            </article>
+
+            <article className="chapter" data-chapter="1" data-stage="1" data-aura="1,0,0.15">
+              <ChapterHead index={1} />
+              <h2>Six triangles make the mark. The seventh is you.</h2>
+              <p>
+                Seven links, one chain. As you scroll they lock together into the CyDrip mark, with the seventh in the
+                middle. That one is the arrow you'll see on the map when you ride.
+              </p>
+            </article>
+
+            <article id="ride" className="chapter" data-chapter="2" data-stage="2" data-aura="0.15,0,1">
+              <ChapterHead index={2} />
+              <h2>Speed you can read at 30&nbsp;km/h.</h2>
+              <p>
+                Live speed, distance, time, climb and calories, sized for a glance from the saddle. A tilted map follows
+                you through real streets.
+              </p>
+              <Specs
+                rows={[
+                  ['Map', '3D streets from OpenStreetMap'],
+                  ['Recording', 'Carries on with the screen off'],
+                  ['Stops', 'Auto-pause at lights'],
+                  ['Finish', 'Press and hold'],
+                ]}
+              />
+            </article>
+
+            <article id="run" className="chapter" data-chapter="3" data-stage="3" data-aura="0,1,0.1">
+              <ChapterHead index={3} />
+              <h2>Then go for a run.</h2>
+              <p>Pick Run before you start. The big number becomes your pace, and the phone can stay in your pocket.</p>
+              <Specs
+                rows={[
+                  ['Pace', 'Minutes per kilometre, smoothed'],
+                  ['Splits', 'Every kilometre'],
+                  ['Screen', 'Sleeps while GPS records'],
+                ]}
+              />
+            </article>
+
+            <article className="chapter" data-chapter="4" data-stage="4" data-aura="1,0.25,0">
+              <ChapterHead index={4} />
+              <h2>Snap. The numbers speak.</h2>
+              <p>
+                After every ride or run, CyDrip draws your route with your distance, time and pace. No captions, no
+                slogans.
+              </p>
+              <ul className="chips" aria-label="Snap styles">
+                {['Line', 'Poster', 'Floor', 'Sticker'].map((s) => (
+                  <li key={s}>{s}</li>
+                ))}
+              </ul>
+            </article>
+          </div>
+
+          <div className="stage-col">
+            <div className="stage-sticky">
+              <Stage chapter={chapter} />
             </div>
-            <p className="fine">Free APK, no account. Version 1.1.0, MIT licence.</p>
-          </div>
-          <p className="scroll-hint" aria-hidden="true">
-            Scroll to assemble
-          </p>
-        </section>
-
-        {/* Stage 1: the puzzle locks into the mark. */}
-        <section className="panel seven" data-stage="1" data-aura="1,0,0.15">
-          <p className="seven-line">
-            <span>Six triangles make the mark.</span>
-            <span>The seventh is you.</span>
-          </p>
-        </section>
-
-        {/* Stage 2: the mark drops onto the road and you ride the lane. */}
-        <section id="ride" className="panel ride" data-stage="2" data-aura="0.15,0,1">
-          <div className="copy">
-            <h2>Speed you can read at 30&nbsp;km/h.</h2>
-            <p>
-              Live speed, distance, time, climb and calories, sized for a glance from the saddle. A tilted 3D map
-              follows you through real streets, and finishing takes a press-and-hold, so a pothole can't end your ride.
-            </p>
-            <ul className="ticks">
-              <li>Keeps recording with the screen off</li>
-              <li>Auto-pause at lights</li>
-              <li>Offline grid view when you're out of data</li>
-            </ul>
-          </div>
-          <figure className="phone">
-            <img
-              src="/img/ride.webp"
-              width={720}
-              height={1558}
-              alt="CyDrip ride screen with a 3D street map and 27.6 km/h in large type."
-            />
-          </figure>
-        </section>
-
-        {/* Still on the road; the aura turns into an ember vortex. */}
-        <section id="run" className="panel run" data-stage="2" data-aura="0,1,0.1">
-          <div className="copy right">
-            <h2>Then go for a run.</h2>
-            <p>
-              Pick Run and the big number becomes your pace per kilometre. Every kilometre gets its split, and the
-              screen sleeps so your phone can stay in your pocket while GPS keeps going.
-            </p>
           </div>
         </section>
 
-        {/* Stage 3: everything reassembles. */}
-        <section className="panel snap" data-stage="3" data-aura="1,0.25,0">
-          <div className="copy center">
-            <h2>Snap. The numbers speak.</h2>
-            <p>
-              After every ride or run, CyDrip draws your route with your distance, time and pace. No captions. Four
-              styles, including a transparent sticker for your own photos.
-            </p>
+        {/* Product vignettes. */}
+        <section id="inside" className="block">
+          <div className="block-head">
+            <span>Inside the app</span>
+            <span>Android, version 1.1.0</span>
+          </div>
+          <div className="bento">
+            <figure className="tile tile-dash">
+              <DashWidget />
+              <figcaption>
+                <b>The dashboard</b>
+                <span>Everything you need mid-ride, nothing you don't.</span>
+              </figcaption>
+            </figure>
+            <figure className="tile tile-rings">
+              <RingsWidget />
+              <figcaption>
+                <b>Your week</b>
+                <span>This week against last, bests and your streak.</span>
+              </figcaption>
+            </figure>
+            <figure className="tile tile-map">
+              <MapWidget />
+              <figcaption>
+                <b>Every ride, mapped</b>
+                <span>Route, speed and elevation for each one.</span>
+              </figcaption>
+            </figure>
+            <figure className="tile tile-snap">
+              <SnapWidget />
+              <figcaption>
+                <b>Snap</b>
+                <span>Four styles, story or square.</span>
+              </figcaption>
+            </figure>
+            <div className="tile tile-privacy">
+              <p className="privacy-title">Your rides never leave your phone.</p>
+              <ul>
+                <li>
+                  <b>No account</b>
+                  <span>Open the app and ride.</span>
+                </li>
+                <li>
+                  <b>No analytics</b>
+                  <span>Nothing is collected about you.</span>
+                </li>
+                <li>
+                  <b>Open source</b>
+                  <span>Every line is on GitHub.</span>
+                </li>
+              </ul>
+            </div>
           </div>
         </section>
 
-        <section className="glass gallery" data-stage="3" data-aura="0.6,0,0" aria-label="Screenshots">
+        <section className="block" aria-label="Screenshots">
+          <div className="block-head">
+            <span>Screens</span>
+            <span>Swipe</span>
+          </div>
           <div className="strip">
             {SCREENSHOTS.map(([file, alt]) => (
               <img key={file} src={`/img/${file}.webp`} width={540} height={960} loading="lazy" alt={alt} />
@@ -161,55 +267,56 @@ export default function App() {
           </div>
         </section>
 
-        <section className="glass privacy" data-stage="3" data-aura="0.6,0,0">
-          <p className="statement">Your rides never leave your phone.</p>
-          <ul className="facts">
-            <li>
-              <strong>No account.</strong> Open the app and ride.
-            </li>
-            <li>
-              <strong>No analytics.</strong> Nothing is collected about you.
-            </li>
-            <li>
-              <strong>Open source.</strong> Every line is on GitHub, MIT licensed.
-            </li>
-          </ul>
-        </section>
-
-        <section id="install" className="glass install" data-stage="3" data-aura="1,0,0">
-          <h2>Install</h2>
+        <section id="install" className="block">
+          <div className="block-head">
+            <span>Install</span>
+            <span>Three steps</span>
+          </div>
           <ol className="steps">
-            {STEPS.map((step, i) => (
-              <li key={step.title}>
-                <span className="step-n" aria-hidden="true">
-                  {i + 1}
-                </span>
-                <div>
-                  <h3>{step.title}</h3>
-                  <p>{step.body}</p>
-                </div>
-              </li>
-            ))}
+            <li>
+              <small>Step 01</small>
+              <h3>Download the APK</h3>
+              <p>
+                Get the latest version from <a href={DOWNLOAD}>GitHub Releases</a> on your Android phone.
+              </p>
+            </li>
+            <li>
+              <small>Step 02</small>
+              <h3>Open it</h3>
+              <p>Android asks you to allow installs from your browser the first time. Allow it, then tap Install.</p>
+            </li>
+            <li>
+              <small>Step 03</small>
+              <h3>Allow location</h3>
+              <p>While using the app is all CyDrip needs. If your phone closes apps, set battery use to Unrestricted.</p>
+            </li>
           </ol>
-          <DownloadButton />
+          <div className="install-cta">
+            <Download />
+          </div>
         </section>
       </main>
 
-      <footer className="glass footer">
-        <div className="footer-brand">
-          <Mark className="brand-mark" />
-          <span>CyDrip by Webrizen AI Labs</span>
+      <footer className="foot">
+        <div className="foot-row">
+          <span className="brand">
+            <Mark className="brand-mark" />
+            <span>CyDrip</span>
+          </span>
+          <nav aria-label="Footer">
+            <a href={REPO}>GitHub</a>
+            <a href={`${REPO}/blob/main/LICENSE`}>MIT licence</a>
+            <a href={`${REPO}/issues`}>Report a bug</a>
+          </nav>
         </div>
-        <nav aria-label="Footer">
-          <a href={REPO}>GitHub</a>
-          <a href={`${REPO}/blob/main/LICENSE`}>MIT licence</a>
-          <a href={`${REPO}/issues`}>Report a bug</a>
-        </nav>
-        <p className="credit">
-          Map data © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, tiles by{' '}
-          <a href="https://openfreemap.org">OpenFreeMap</a>.
-        </p>
+        <div className="foot-row foot-small">
+          <span>Built and maintained by Webrizen AI Labs</span>
+          <span>
+            Map data © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, tiles by{' '}
+            <a href="https://openfreemap.org">OpenFreeMap</a>
+          </span>
+        </div>
       </footer>
-    </>
+    </div>
   );
 }

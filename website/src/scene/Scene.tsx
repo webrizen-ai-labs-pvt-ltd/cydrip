@@ -1,24 +1,25 @@
-// The WebGL layer behind the page: an aura shader, seven glowing triangles that orbit, assemble
-// into the CyDrip mark, drop onto a road and reassemble — all driven by page scroll.
+// The WebGL stage: an aura shader and seven interlocking triangular chain links that hang,
+// lock into the CyDrip mark, drop onto a road, close into a loop and reassemble — driven by scroll.
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { Bloom, EffectComposer, ToneMapping } from '@react-three/postprocessing';
 import { ToneMappingMode } from 'postprocessing';
 import { type ReactNode, useMemo, useRef } from 'react';
 import {
   AdditiveBlending,
+  CatmullRomCurve3,
   Color,
-  ExtrudeGeometry,
   type InstancedMesh,
   type Mesh,
   MeshBasicMaterial,
   Object3D,
   PlaneGeometry,
   ShaderMaterial,
+  TubeGeometry,
   Vector2,
   Vector3,
 } from 'three';
 
-import { auraFragment, auraVertex, roadFragment, roadVertex, triFragment, triVertex } from './glsl';
+import { auraFragment, auraVertex, linkFragment, linkVertex, roadFragment, roadVertex } from './glsl';
 import { scrollTarget } from './scroll';
 import { CAMERAS, COLORS, ease, STAGES, triangleShape } from './stages';
 
@@ -35,11 +36,13 @@ if (typeof window !== 'undefined') {
   });
 }
 
+const roadWeight = () => Math.max(0, 1 - Math.abs(state.stage - 2) * 1.4);
+
 function Director() {
   useFrame((_, dt) => {
     const d = Math.min(dt, 0.05);
     if (!reduceMotion) state.time += d;
-    const k = 1 - Math.pow(0.0015, d); // frame-rate independent easing toward the scroll target
+    const k = 1 - Math.pow(0.002, d); // frame-rate independent easing toward the scroll target
     state.stage += (scrollTarget.stage - state.stage) * k;
     state.a += (scrollTarget.a - state.a) * k;
     state.v += (scrollTarget.v - state.v) * k;
@@ -51,14 +54,13 @@ function Director() {
 }
 
 function useNarrow() {
-  return useThree((s) => s.size.width < 860);
+  return useThree((s) => s.size.width < 520);
 }
 
 // ---------------------------------------------------------------- aura
 function Aura() {
   const size = useThree((s) => s.size);
   const dpr = useThree((s) => s.viewport.dpr);
-  const narrow = useNarrow();
   const material = useMemo(
     () =>
       new ShaderMaterial({
@@ -84,9 +86,6 @@ function Aura() {
     u.uAura.value = state.a;
     u.uVortex.value = state.v;
     u.uStreak.value = state.s;
-    // In the hero the aura sits behind the orbit (right on desktop, above the text on phones).
-    const hero = Math.max(0, 1 - state.stage * 2);
-    u.uCenter.value.set(narrow ? 0 : 0.32 * hero, narrow ? 0.12 * hero : 0);
   });
   return (
     <mesh frustumCulled={false} renderOrder={-10} material={material}>
@@ -95,20 +94,16 @@ function Aura() {
   );
 }
 
-// ---------------------------------------------------------------- triangles
-function Triangles() {
+// ---------------------------------------------------------------- chain links
+function Links() {
   const narrow = useNarrow();
+  // A hollow triangular link: a tube swept around the rounded triangle outline.
   const geometry = useMemo(() => {
-    const g = new ExtrudeGeometry(triangleShape(), {
-      depth: 0.1,
-      bevelEnabled: true,
-      bevelThickness: 0.035,
-      bevelSize: 0.025,
-      bevelSegments: 4,
-      curveSegments: 14,
-    });
-    g.center();
-    return g;
+    const outline = triangleShape()
+      .getSpacedPoints(90)
+      .slice(0, -1)
+      .map((p) => new Vector3(p.x, p.y, 0));
+    return new TubeGeometry(new CatmullRomCurve3(outline, true), 180, 0.05, 14, true);
   }, []);
   const materials = useMemo(
     () =>
@@ -119,10 +114,10 @@ function Triangles() {
               uTime: { value: 0 },
               uGlow: { value: 1 },
               uSeed: { value: i * 3.7 },
-              uColor: { value: new Color(hex).multiplyScalar(i === 6 ? 1.6 : 1.25) },
+              uColor: { value: new Color(hex).multiplyScalar(i === 6 ? 1.5 : 1.2) },
             },
-            vertexShader: triVertex,
-            fragmentShader: triFragment,
+            vertexShader: linkVertex,
+            fragmentShader: linkFragment,
           }),
       ),
     [],
@@ -132,19 +127,19 @@ function Triangles() {
   useFrame(() => {
     const s0 = Math.min(Math.floor(state.stage), STAGES.length - 2);
     const f = state.stage - s0;
-    const assembled = 1 - Math.min(Math.abs(state.stage - 1), Math.abs(state.stage - 3), 1);
+    const assembled = 1 - Math.min(Math.abs(state.stage - 1), Math.abs(state.stage - 4), 1);
     refs.current.forEach((m, i) => {
       if (!m) return;
-      // Puzzle stagger: each piece moves a beat after the one before it.
-      const fi = ease((f - i * 0.045) / (1 - 6 * 0.045));
+      // Each link moves a beat after the one before it, so the chain unspools and re-forms.
+      const fi = ease((f - i * 0.05) / (1 - 6 * 0.05));
       const A = STAGES[s0](i, state.time, narrow);
       const B = STAGES[s0 + 1](i, state.time, narrow);
       m.position.lerpVectors(A.p, B.p, fi);
-      m.rotation.set(A.r.x + (B.r.x - A.r.x) * fi, A.r.y + (B.r.y - A.r.y) * fi, A.r.z + (B.r.z - A.r.z) * fi);
+      m.quaternion.slerpQuaternions(A.q, B.q, fi);
       m.scale.setScalar(A.s + (B.s - A.s) * fi);
       const u = materials[i].uniforms;
       u.uTime.value = state.time;
-      u.uGlow.value = 0.85 + assembled * 0.5 + Math.sin(state.time * 1.6 + i) * 0.12;
+      u.uGlow.value = 0.9 + assembled * 0.35 + Math.sin(state.time * 1.6 + i) * 0.1;
     });
   });
 
@@ -180,7 +175,7 @@ function Road() {
   );
   useFrame(() => {
     material.uniforms.uTime.value = state.time;
-    material.uniforms.uOpacity.value = Math.max(0, 1 - Math.abs(state.stage - 2) * 1.4);
+    material.uniforms.uOpacity.value = roadWeight();
   });
   return (
     <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -1.15, -18]} material={material}>
@@ -190,10 +185,10 @@ function Road() {
 }
 
 function Streaks() {
-  const count = useThree((s) => (s.size.width < 700 ? 70 : 140));
+  const count = 110;
   const ref = useRef<InstancedMesh>(null);
   const { geometry, material, data } = useMemo(() => {
-    const g = new PlaneGeometry(0.025, 2.2);
+    const g = new PlaneGeometry(0.022, 2.2);
     g.rotateX(-Math.PI / 2);
     const m = new MeshBasicMaterial({
       color: new Color(0.45, 0.9, 3.2),
@@ -203,19 +198,19 @@ function Streaks() {
       depthWrite: false,
     });
     const d = Array.from({ length: count }, () => ({
-      x: (Math.random() < 0.5 ? -1 : 1) * (0.9 + Math.random() * 4.5),
-      y: -1.1 + Math.random() * 2.8,
+      x: (Math.random() < 0.5 ? -1 : 1) * (0.8 + Math.random() * 4),
+      y: -1.1 + Math.random() * 2.6,
       z: -40 + Math.random() * 45,
       v: 14 + Math.random() * 22,
     }));
     return { geometry: g, material: m, data: d };
-  }, [count]);
+  }, []);
   const dummy = useMemo(() => new Object3D(), []);
 
   useFrame((_, dt) => {
     const mesh = ref.current;
     if (!mesh) return;
-    const w = Math.max(0, 1 - Math.abs(state.stage - 2) * 1.4);
+    const w = roadWeight();
     material.opacity = w * 0.9;
     mesh.visible = w > 0.01;
     if (!mesh.visible) return;
@@ -236,15 +231,19 @@ function Streaks() {
 // ---------------------------------------------------------------- camera
 function CameraRig() {
   const camera = useThree((s) => s.camera);
+  const aspect = useThree((s) => s.size.width / Math.max(s.size.height, 1));
   const pos = useMemo(() => new Vector3(), []);
   const look = useMemo(() => new Vector3(), []);
   useFrame(() => {
     const s0 = Math.min(Math.floor(state.stage), CAMERAS.length - 2);
     const f = ease(state.stage - s0);
-    pos.lerpVectors(CAMERAS[s0].p, CAMERAS[s0 + 1].p, f);
-    pos.x += state.px * 0.35;
-    pos.y -= state.py * 0.2;
     look.lerpVectors(CAMERAS[s0].look, CAMERAS[s0 + 1].look, f);
+    pos.lerpVectors(CAMERAS[s0].p, CAMERAS[s0 + 1].p, f);
+    // Pull back in tall frames so the chain still fits side to side.
+    const pull = Math.max(1, 1.05 / aspect);
+    pos.sub(look).multiplyScalar(pull).add(look);
+    pos.x += state.px * 0.3;
+    pos.y -= state.py * 0.18;
     camera.position.copy(pos);
     camera.lookAt(look);
   });
@@ -254,24 +253,21 @@ function CameraRig() {
 export function Scene({ fallback }: { fallback: ReactNode }) {
   return (
     <Canvas
-      className="scene"
       dpr={[1, 1.75]}
       gl={{ antialias: true, powerPreference: 'high-performance' }}
-      camera={{ fov: 38, near: 0.1, far: 100, position: [0, 0, 7.4] }}
+      camera={{ fov: 38, near: 0.1, far: 100, position: [0, 0, 6] }}
       fallback={fallback}
-      aria-hidden
     >
       <Director />
       <Aura />
       <Road />
       <Streaks />
-      <Triangles />
+      <Links />
       <CameraRig />
       <EffectComposer>
-        <Bloom intensity={0.9} luminanceThreshold={0.55} luminanceSmoothing={0.25} mipmapBlur />
+        <Bloom intensity={1.1} luminanceThreshold={0.5} luminanceSmoothing={0.25} mipmapBlur />
         <ToneMapping mode={ToneMappingMode.ACES_FILMIC} />
       </EffectComposer>
     </Canvas>
   );
 }
-

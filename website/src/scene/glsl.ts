@@ -27,7 +27,8 @@ export const auraFragment = /* glsl */ `
     float n2 = fbm(vec3(uv*2.6 + n*1.6, t*0.11 + 7.0));
     float blob = smoothstep(0.62, 0.05, r + (n2 - 0.5)*0.42);
     vec3 pal = iri(n2*1.1 + sin(a)*0.12 + cos(a*2.0)*0.05 + t*0.025);
-    pal = mix(vec3(0.08, 0.25, 1.0), pal, 0.7);
+    pal = mix(vec3(0.08, 0.25, 1.0), pal, 0.65);
+    pal.g *= 0.5; // keep it blue, violet and ember, never murky green
     vec3 auraCol = pal*blob*0.32 + vec3(0.1, 0.25, 1.0)*exp(-r*r*5.0)*0.06;
 
     // Ember vortex: spiral bands caught in a ring.
@@ -53,35 +54,32 @@ export const auraFragment = /* glsl */ `
   }
 `;
 
-export const triVertex = /* glsl */ `
-  varying vec3 vN; varying vec3 vV; varying vec3 vP; varying vec3 vON;
+export const linkVertex = /* glsl */ `
+  varying vec3 vN; varying vec3 vV; varying vec3 vP;
   void main(){
     vec4 mv = modelViewMatrix*vec4(position, 1.0);
-    vN = normalize(normalMatrix*normal); vV = normalize(-mv.xyz); vP = position; vON = normal;
+    vN = normalize(normalMatrix*normal); vV = normalize(-mv.xyz); vP = position;
     gl_Position = projectionMatrix*mv;
   }
 `;
 
-/** Glowing bevelled outline, molten veins drifting across a dark glass face. */
-export const triFragment = /* glsl */ `
+/** A glowing tube: hot core where it faces you, a bright rim, and molten veins running along it. */
+export const linkFragment = /* glsl */ `
   uniform float uTime, uGlow, uSeed; uniform vec3 uColor;
-  varying vec3 vN; varying vec3 vV; varying vec3 vP; varying vec3 vON;
+  varying vec3 vN; varying vec3 vV; varying vec3 vP;
   ${NOISE}
   void main(){
     vec3 N = normalize(vN), V = normalize(vV);
-    float fres = pow(1.0 - abs(dot(N, V)), 2.4);
-    float edge = smoothstep(0.15, 0.85, 1.0 - abs(normalize(vON).z));
-    vec3 p = vP*4.2 + vec3(uSeed, uSeed*0.7, uTime*0.22);
-    float n = fbm(p + fbm(p*0.6 + uTime*0.05)*1.4);
-    float vein = pow(smoothstep(0.72, 1.0, 1.0 - abs(n*2.0 - 1.0)), 2.5);
-    vec3 glass = vec3(0.012, 0.014, 0.02) + uColor*0.05;
-    float face = 1.0 - edge;
-    vec3 col = glass
-      + uColor*(0.18 + 0.12*sin(vP.y*6.0 + uTime))*face*uGlow
-      + uColor*vein*1.3*face*uGlow
-      + vec3(1.0)*pow(vein, 4.0)*0.5*face*uGlow
-      + uColor*edge*3.2*uGlow + vec3(1.0)*edge*edge*0.6*uGlow
-      + uColor*fres*0.8;
+    float facing = abs(dot(N, V));
+    float rim = pow(1.0 - facing, 2.0);
+    vec3 p = vP*6.0 + vec3(uSeed, uSeed*0.7, uTime*0.35);
+    float n = fbm(p + fbm(p*0.5 + uTime*0.08)*1.3);
+    float vein = pow(smoothstep(0.7, 1.0, 1.0 - abs(n*2.0 - 1.0)), 2.0);
+    vec3 col = uColor*(0.22 + 0.5*facing)*uGlow
+      + uColor*rim*1.6
+      + uColor*vein*1.8*uGlow
+      + vec3(1.0)*pow(vein, 3.0)*0.9*uGlow
+      + vec3(1.0)*pow(facing, 6.0)*0.35*uGlow;
     gl_FragColor = vec4(col, 1.0);
   }
 `;
