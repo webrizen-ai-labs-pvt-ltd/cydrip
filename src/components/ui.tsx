@@ -1,6 +1,7 @@
 import * as Haptics from 'expo-haptics';
 import { ReactNode, useMemo, useRef, useState } from 'react';
-import { Animated, Easing, Pressable, StyleSheet, Text, TextStyle, View, ViewStyle } from 'react-native';
+import { Animated, Easing, Linking, Pressable, StyleSheet, Text, TextStyle, View, ViewStyle } from 'react-native';
+import Svg, { Path } from 'react-native-svg';
 
 import { colors, fonts, type } from '@/theme';
 
@@ -85,6 +86,26 @@ export function DefRow({ label, value, detail }: { label: string; value: string;
       </View>
       <Text style={s.defValue}>{value}</Text>
     </View>
+  );
+}
+
+/** A row that opens a web page in the phone's browser. */
+export function LinkRow({ label, detail, url }: { label: string; detail?: string; url: string }) {
+  return (
+    <Pressable
+      accessibilityRole="link"
+      accessibilityHint="Opens in your browser"
+      onPress={() => Linking.openURL(url)}
+      style={({ pressed }) => [s.defRow, { opacity: pressed ? 0.6 : 1 }]}
+    >
+      <View style={{ flex: 1 }}>
+        <Text style={s.defLabel}>{label}</Text>
+        {detail ? <Text style={s.defDetail}>{detail}</Text> : null}
+      </View>
+      <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={colors.fog} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+        <Path d="M7 17 17 7M9 7h8v8" />
+      </Svg>
+    </Pressable>
   );
 }
 

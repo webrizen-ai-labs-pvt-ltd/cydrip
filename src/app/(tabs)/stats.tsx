@@ -1,10 +1,13 @@
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
+import { Linking, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Rect, Text as SvgText } from 'react-native-svg';
 
-import { DefRow, Hairline, ScreenTitle, Segmented } from '@/components/ui';
+import Constants from 'expo-constants';
+
+import { DefRow, Hairline, LinkRow, ScreenTitle, Segmented } from '@/components/ui';
+import { LINKS } from '@/lib/links';
 import { listRides, Ride } from '@/lib/db';
 import { fmtDate, fmtDurationShort, fmtKm, fmtPace, fmtSpeed } from '@/lib/format';
 import { getWeightKg, setWeightKg } from '@/lib/settings';
@@ -214,6 +217,22 @@ export default function StatsScreen() {
             <Text style={s.fog}>kg</Text>
           </View>
         </View>
+
+        <View>
+          <Text style={s.section}>About</Text>
+          <LinkRow label="Privacy policy" detail="Your rides stay on your phone" url={LINKS.privacy} />
+          <Hairline />
+          <LinkRow label="Terms of use" url={LINKS.terms} />
+          <Hairline />
+          <LinkRow label="Source code" detail="Open source, MIT licence" url={LINKS.source} />
+          <Hairline />
+          <LinkRow label="Report a bug" url={LINKS.issues} />
+          <Hairline />
+          <DefRow label="Version" value={Constants.expoConfig?.version ?? '—'} />
+          <Text style={s.made}>
+            CyDrip by <Text style={s.madeLink} onPress={() => Linking.openURL(LINKS.webrizen)}>Webrizen AI Labs</Text>
+          </Text>
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -229,10 +248,13 @@ const s = StyleSheet.create({
   fog: { color: colors.fog, fontFamily: fonts.body, fontSize: type.body },
   fogSmall: { color: colors.fog, fontFamily: fonts.body, fontSize: type.caption, marginTop: 2 },
   section: { color: colors.paper, fontFamily: fonts.bodySemi, fontSize: type.title, marginBottom: space.xs },
+  made: { color: colors.fog, fontFamily: fonts.body, fontSize: type.caption, marginTop: space.lg },
+  madeLink: { color: colors.paper, textDecorationLine: 'underline' },
   weightRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: 14 },
   weightLabel: { color: colors.paper, fontFamily: fonts.bodyMedium, fontSize: type.body },
   input: {
-    minWidth: 72,
+    width: 84, // fixed, so the label beside it keeps its width
+    flexShrink: 0,
     textAlign: 'center',
     color: colors.paper,
     fontFamily: fonts.num,
