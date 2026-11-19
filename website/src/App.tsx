@@ -1,12 +1,11 @@
 import { useEffect, useState } from 'react';
 
-import { Mark } from './components/Mark';
+import { Bar, Download, Footer } from './components/Chrome';
 import { CHAPTERS, Stage } from './components/Stage';
 import { DashWidget, MapWidget, RingsWidget, SnapWidget } from './components/Widgets';
 import { trackScroll } from './scene/scroll';
+import { DOWNLOAD, REPO } from './site';
 
-const REPO = 'https://github.com/webrizen-ai-labs-pvt-ltd/cydrip';
-const DOWNLOAD = `${REPO}/releases/latest`;
 
 const SCREENSHOTS = [
   ['1-speed', 'Speed you can read at a glance'],
@@ -16,23 +15,6 @@ const SCREENSHOTS = [
   ['5-week', 'Know your week'],
   ['6-offline', 'Works offline too'],
 ] as const;
-
-function DownloadIcon() {
-  return (
-    <svg viewBox="0 0 20 20" aria-hidden="true">
-      <path d="M10 3v10m0 0-4-4m4 4 4-4M4 16h12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function Download({ label = 'Download for Android' }: { label?: string }) {
-  return (
-    <a className="pill pill-dark" href={DOWNLOAD}>
-      {label}
-      <DownloadIcon />
-    </a>
-  );
-}
 
 /** Label on the left, value on the right, hairline between rows. */
 function Specs({ rows }: { rows: [string, string][] }) {
@@ -87,20 +69,7 @@ export default function App() {
         Skip to content
       </a>
 
-      <header className="bar">
-        <a className="brand" href="/" aria-label="CyDrip home">
-          <Mark className="brand-mark" />
-          <span>CyDrip</span>
-        </a>
-        <nav aria-label="Main">
-          <a href="#ride">Ride</a>
-          <a href="#run">Run</a>
-          <a href="#inside">Inside</a>
-          <a href="#install">Install</a>
-          <a href={REPO}>GitHub</a>
-        </nav>
-        <Download label="Download" />
-      </header>
+      <Bar onHome />
 
       <main id="main">
         {/* The story: chapters on the left, the live scene framed on the right. */}
@@ -297,26 +266,7 @@ export default function App() {
         </section>
       </main>
 
-      <footer className="foot">
-        <div className="foot-row">
-          <span className="brand">
-            <Mark className="brand-mark" />
-            <span>CyDrip</span>
-          </span>
-          <nav aria-label="Footer">
-            <a href={REPO}>GitHub</a>
-            <a href={`${REPO}/blob/main/LICENSE`}>MIT licence</a>
-            <a href={`${REPO}/issues`}>Report a bug</a>
-          </nav>
-        </div>
-        <div className="foot-row foot-small">
-          <span>Built and maintained by Webrizen AI Labs</span>
-          <span>
-            Map data © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, tiles by{' '}
-            <a href="https://openfreemap.org">OpenFreeMap</a>
-          </span>
-        </div>
-      </footer>
+      <Footer />
     </div>
   );
 }

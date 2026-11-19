@@ -105,3 +105,5 @@ Issues and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md).
 ## License
 
 MIT © Webrizen. See [LICENSE](LICENSE).
+
+[Website](https://cydrip.webrizen.com) · [Privacy policy](https://cydrip.webrizen.com/privacy) · [Terms of use](https://cydrip.webrizen.com/terms) · [Webrizen](https://webrizen.com)
