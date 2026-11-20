@@ -11,7 +11,7 @@ Developer policy: https://www.phonepeappstore.com/developer-policy/
 | --- | --- |
 | Upload type | Upload File Directly (not on Google Play) |
 | Package | `com.webrizen.cydrip` |
-| File | `CyDrip-1.1.1.apk` from GitHub Releases (release-signed by EAS; same key for every update) |
+| File | `CyDrip-1.1.2.apk` from GitHub Releases (release-signed by EAS; same key for every update) |
 | App type | Apps |
 | Category | Health & Fitness |
 | Target age group | 13+ (or the console's general-audience option) |
