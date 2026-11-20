@@ -10,14 +10,15 @@ import { useSyncExternalStore } from 'react';
 import { colors } from '@/theme';
 import { ACTIVITY, ActivityKind, isKind } from './activity';
 import { createRide, deleteRide, finishRide, getPoints, insertPoint, setPreview } from './db';
-import { activityTitle, bearing, estimateCalories, haversine, simplifyTrack } from './format';
+import { activityTitle, bearing, estimateCalories, simplifyTrack } from './format';
+import { type Altitude, climb, distanceM, kalman, type Smoothed, stepDistance, sustainedSpeed } from './gpsFilter';
 import { getWeightKg } from './settings';
 
 const RIDE_TASK = 'cydrip-ride-location';
 const STATE_KEY = 'cydrip.activeRide';
 
-const MAX_ACCURACY = 30; // m — ignore worse fixes
-const ELEV_STEP = 4; // m of hysteresis before counting a climb
+const MAX_ACCURACY = 30; // m — ignore worse fixes once recording
+const FIRST_FIX_ACCURACY = 20; // m — the first fix of a segment must be this good (GPS warm-up)
 
 export type RideStatus = 'recording' | 'paused';
 
@@ -40,8 +41,13 @@ export type ActiveRide = {
   accuracy: number | null;
   /** Direction of travel in degrees from north, when known. */
   heading: number | null;
+  /** Last smoothed position (what the map shows and distance is measured from). */
   lastFix: { lat: number; lon: number; ts: number } | null;
-  elevRef: number | null;
+  /** Kalman filter state; null at the start of each recording segment. */
+  filt: Smoothed | null;
+  /** Last few moving speeds, so one glitchy reading can't set max speed. */
+  recentSpeeds: number[];
+  alt: Altitude;
   /** Recent fixes for the live road view (kept short). */
   trail: [number, number][];
   /** Simulated ride for trying the app without riding (dev builds only). */
@@ -60,7 +66,17 @@ function loadActiveRide(): Promise<void> {
       const raw = await Storage.getItem(STATE_KEY);
       if (raw && !state) {
         const r = JSON.parse(raw) as ActiveRide;
-        state = { ...r, heading: r.heading ?? null, kind: isKind(r.kind) ? r.kind : 'ride', smoothSpeed: r.smoothSpeed ?? 0 };
+        state = {
+          ...r,
+          heading: r.heading ?? null,
+          kind: isKind(r.kind) ? r.kind : 'ride',
+          smoothSpeed: r.smoothSpeed ?? 0,
+          // Rides saved by older versions: restart the filter from the next fix.
+          filt: r.filt ?? null,
+          lastFix: r.filt ? r.lastFix : null,
+          recentSpeeds: r.recentSpeeds ?? [],
+          alt: r.alt ?? { smooth: null, ref: null, gain: r.elevGain ?? 0 },
+        };
         listeners.forEach((l) => l());
       }
     } catch (e) {
@@ -111,32 +127,49 @@ function handleLocations(locations: Location.LocationObject[]) {
 async function processFix(loc: Location.LocationObject) {
   const r = state;
   if (!r || r.status !== 'recording') return;
-  const { latitude: lat, longitude: lon, altitude, accuracy, speed: gpsSpeed, heading: gpsHeading } = loc.coords;
+  const { latitude, longitude, altitude, altitudeAccuracy, accuracy, speed: gpsSpeed, heading: gpsHeading } = loc.coords;
   const ts = loc.timestamp;
-  if (accuracy != null && accuracy > MAX_ACCURACY) {
+  // Warm-up: the first fix of a segment must be good; after that, only reject clearly bad ones.
+  const limit = r.filt ? MAX_ACCURACY : FIRST_FIX_ACCURACY;
+  if (accuracy != null && accuracy > limit) {
     set({ ...r, accuracy });
     return;
   }
 
-  const next: ActiveRide = { ...r, accuracy };
   const cfg = ACTIVITY[r.kind];
-  const last = r.lastFix;
-  if (last && ts > last.ts) {
-    const d = haversine(last.lat, last.lon, lat, lon);
-    const dt = (ts - last.ts) / 1000;
+  const prev = r.filt;
+  const reported = gpsSpeed != null && gpsSpeed >= 0 ? gpsSpeed : null;
+  if (prev && ts > prev.ts) {
     // A fix that implies teleporting is a glitch — drop it, whatever speed the GPS chip reports.
-    if (d / dt > cfg.maxSpeed) return;
-    let speed = gpsSpeed != null && gpsSpeed >= 0 ? gpsSpeed : d / dt;
-    if (speed > cfg.maxSpeed) return;
+    const jump = distanceM(prev.lat, prev.lon, latitude, longitude);
+    if (jump / ((ts - prev.ts) / 1000) > cfg.maxSpeed * 1.5 || (reported ?? 0) > cfg.maxSpeed) return;
+  }
+
+  const filt = kalman(prev, {
+    lat: latitude,
+    lon: longitude,
+    acc: accuracy ?? 15,
+    ts,
+    speed: reported,
+    heading: gpsHeading != null && gpsHeading >= 0 ? gpsHeading : null,
+  });
+  const next: ActiveRide = { ...r, accuracy, filt };
+
+  if (prev && ts > prev.ts) {
+    const dt = (ts - prev.ts) / 1000;
+    const step = stepDistance(prev, filt, reported);
+    let speed = reported ?? step / dt;
     const moving = speed >= cfg.movingSpeed;
     if (moving) {
-      next.distanceM += d;
+      next.distanceM += step;
       next.movingMs += Math.min(dt, 30) * 1000;
-      next.maxSpeed = Math.max(next.maxSpeed, speed);
+      next.recentSpeeds = [...r.recentSpeeds, speed].slice(-5);
+      next.maxSpeed = Math.max(r.maxSpeed, sustainedSpeed(next.recentSpeeds));
       if (gpsHeading != null && gpsHeading >= 0) next.heading = gpsHeading;
-      else if (d > 2) next.heading = bearing(last.lat, last.lon, lat, lon);
+      else if (step > 2) next.heading = bearing(prev.lat, prev.lon, filt.lat, filt.lon);
     } else {
       speed = 0;
+      next.recentSpeeds = [];
     }
     next.speed = speed;
     next.moving = moving;
@@ -144,20 +177,15 @@ async function processFix(loc: Location.LocationObject) {
     next.smoothSpeed = moving ? r.smoothSpeed + (speed - r.smoothSpeed) * k : 0;
   }
 
-  if (altitude != null) {
-    if (next.elevRef == null) next.elevRef = altitude;
-    else if (altitude - next.elevRef > ELEV_STEP) {
-      next.elevGain += altitude - next.elevRef;
-      next.elevRef = altitude;
-    } else if (altitude < next.elevRef - ELEV_STEP) next.elevRef = altitude;
-  }
+  next.alt = climb(r.alt, altitude, altitudeAccuracy);
+  next.elevGain = next.alt.gain;
 
-  next.lastFix = { lat, lon, ts };
+  next.lastFix = { lat: filt.lat, lon: filt.lon, ts };
   if (next.moving || r.trail.length === 0) {
-    next.trail = [...r.trail, [lat, lon] as [number, number]].slice(-400);
+    next.trail = [...r.trail, [filt.lat, filt.lon] as [number, number]].slice(-400);
   }
   set(next);
-  await insertPoint(r.rideId, { ts, lat, lon, alt: altitude, speed: next.speed, acc: accuracy });
+  await insertPoint(r.rideId, { ts, lat: filt.lat, lon: filt.lon, alt: altitude, speed: next.speed, acc: accuracy });
 }
 
 // Must be defined at module scope; imported from the root layout.
@@ -248,7 +276,9 @@ function newRide(rideId: number, startedAt: number, kind: ActivityKind, demo = f
     accuracy: null,
     heading: null,
     lastFix: null,
-    elevRef: null,
+    filt: null,
+    recentSpeeds: [],
+    alt: { smooth: null, ref: null, gain: 0 },
     trail: [],
     demo,
   };
@@ -316,7 +346,7 @@ export async function resumeRide(): Promise<void> {
   const r = state;
   if (!r || r.status !== 'paused') return;
   // Drop the last fix so the gap while paused isn't counted as a straight-line ride.
-  set({ ...r, status: 'recording', segmentStart: Date.now(), lastFix: null });
+  set({ ...r, status: 'recording', segmentStart: Date.now(), lastFix: null, filt: null, recentSpeeds: [] });
   await startUpdates();
 }
 

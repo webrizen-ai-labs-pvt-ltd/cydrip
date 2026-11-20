@@ -64,7 +64,8 @@ export function fmtTime(ts: number): string {
 
 export function activityTitle(ts: number, kind: ActivityKind): string {
   const h = new Date(ts).getHours();
-  const part = h < 5 ? 'Night' : h < 12 ? 'Morning' : h < 17 ? 'Afternoon' : h < 21 ? 'Evening' : 'Night';
+  // From 4 am it's a morning ride or run, not a night one.
+  const part = h < 4 ? 'Night' : h < 12 ? 'Morning' : h < 17 ? 'Afternoon' : h < 21 ? 'Evening' : 'Night';
   return `${part} ${kind === 'run' ? 'Run' : 'Drip'}`;
 }
 

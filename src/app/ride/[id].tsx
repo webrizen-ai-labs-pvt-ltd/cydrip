@@ -40,7 +40,10 @@ export default function ActivityDetail() {
   const avg = avgSpeed(ride.distance_m, ride.moving_ms);
   const chartW = width - space.lg * 2;
   const mapH = Math.round(height * 0.42);
-  const fastestSplit = Math.max(0, ...splits.map(splitSpeed));
+  // Only complete kilometres count as a "fastest km"; a 400 m run has none.
+  const fullSplits = splits.filter((sp) => sp.distM >= 1000);
+  const fastestSplit = Math.max(0, ...fullSplits.map(splitSpeed));
+  const barScale = Math.max(0, ...splits.map(splitSpeed)) || 1;
 
   function onDelete() {
     Alert.alert(`Delete this ${noun}?`, 'It and its route are removed from this phone. This can’t be undone.', [
@@ -88,7 +91,7 @@ export default function ActivityDetail() {
           {run ? (
             <>
               <Metric value={fmtPace(avg)} label="Avg /km" />
-              <Metric value={fmtPace(fastestSplit || ride.max_speed)} label="Fastest km" />
+              <Metric value={fastestSplit ? fmtPace(fastestSplit) : '—'} label="Fastest km" />
             </>
           ) : (
             <>
@@ -114,7 +117,7 @@ export default function ActivityDetail() {
             <Text style={s.chartTitle}>Splits</Text>
             {splits.map((sp) => {
               const v = splitSpeed(sp);
-              const fastest = v === fastestSplit;
+              const fastest = sp.distM >= 1000 && v === fastestSplit;
               return (
                 <View key={sp.km} style={s.splitRow}>
                   <Text style={s.splitKm}>{sp.distM < 1000 ? fmtKm(sp.distM, 2) : sp.km}</Text>
@@ -122,7 +125,7 @@ export default function ActivityDetail() {
                     <View
                       style={[
                         s.splitBar,
-                        { width: `${Math.max(8, (v / (fastestSplit || 1)) * 100)}%` },
+                        { width: `${Math.max(8, (v / barScale) * 100)}%` },
                         fastest && { backgroundColor: colors.paper },
                       ]}
                     />
