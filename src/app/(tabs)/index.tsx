@@ -287,6 +287,8 @@ function Dashboard({ ride }: { ride: ActiveRide }) {
   );
 
   const gpsWeak = recording && ride.accuracy != null && ride.accuracy > 20;
+  // No fix for a while during a ride: the phone is holding back GPS (battery saving).
+  const gpsPaused = recording && !ride.demo && ride.lastFix != null && now - ride.lastFix.ts > 15000;
   const speedSize = landscape ? Math.min(height * 0.3, 200) : Math.min(width * 0.44, 190);
   const pairSize = landscape ? Math.min(height * 0.09, 44) : 44;
   const rowSize = landscape ? Math.min(height * 0.065, type.stat) : type.stat;
@@ -297,8 +299,14 @@ function Dashboard({ ride }: { ride: ActiveRide }) {
         <View style={[s.dot, { backgroundColor: recording ? colors.rec : colors.fog }]} />
         <Text style={s.statusText}>{state}</Text>
       </View>
-      <Text style={[s.statusText, gpsWeak && { color: colors.amber }]}>
-        {ride.demo ? 'Demo' : ride.accuracy != null ? `GPS ±${Math.round(ride.accuracy)} m` : 'GPS…'}
+      <Text style={[s.statusText, (gpsWeak || gpsPaused) && { color: colors.amber }]}>
+        {ride.demo
+          ? 'Demo'
+          : gpsPaused
+            ? 'GPS paused by phone'
+            : ride.accuracy != null
+              ? `GPS ±${Math.round(ride.accuracy)} m`
+              : 'GPS…'}
       </Text>
     </View>
   );

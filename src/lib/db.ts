@@ -16,6 +16,8 @@ export type Ride = {
   calories: number;
   /** JSON [lat, lon][] — a thinned track for list thumbnails. */
   preview: string | null;
+  /** Time the phone held back GPS during the ride (no fix for over 10 s), ms. */
+  gap_ms: number;
 };
 
 export type Point = {
@@ -68,6 +70,8 @@ CREATE INDEX IF NOT EXISTS points_ride ON points (ride_id, ts);
   if (!cols.includes('preview')) await db.execAsync('ALTER TABLE rides ADD COLUMN preview TEXT');
   // v3: runs as well as rides. Existing activities are rides.
   if (!cols.includes('kind')) await db.execAsync("ALTER TABLE rides ADD COLUMN kind TEXT NOT NULL DEFAULT 'ride'");
+  // v4: how long the phone throttled GPS during a ride.
+  if (!cols.includes('gap_ms')) await db.execAsync('ALTER TABLE rides ADD COLUMN gap_ms INTEGER NOT NULL DEFAULT 0');
   return db;
 }
 
@@ -105,8 +109,8 @@ export async function finishRide(
   const db = await getDb();
   await db.runAsync(
     `UPDATE rides SET ended_at = ?, distance_m = ?, moving_ms = ?, elapsed_ms = ?, max_speed = ?,
-     elev_gain = ?, calories = ? WHERE id = ?`,
-    s.ended_at, s.distance_m, s.moving_ms, s.elapsed_ms, s.max_speed, s.elev_gain, s.calories, id,
+     elev_gain = ?, calories = ?, gap_ms = ? WHERE id = ?`,
+    s.ended_at, s.distance_m, s.moving_ms, s.elapsed_ms, s.max_speed, s.elev_gain, s.calories, s.gap_ms, id,
   );
 }
 

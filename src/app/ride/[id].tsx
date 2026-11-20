@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Alert, Linking, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { downsample, LineChart } from '@/components/LineChart';
@@ -107,6 +107,21 @@ export default function ActivityDetail() {
           <View style={{ flex: 1 }} />
         </View>
 
+        {ride.gap_ms > 60000 ? (
+          <View style={s.notice} accessibilityRole="alert">
+            <Text style={s.noticeTitle}>
+              Your phone held back GPS for {Math.round(ride.gap_ms / 60000)} min of this {noun}
+            </Text>
+            <Text style={s.noticeBody}>
+              Distance and route may be short. To fix it, open CyDrip&apos;s settings and set Battery saver to No
+              restrictions. On Xiaomi, Redmi and POCO phones, also turn on Autostart.
+            </Text>
+            <Pressable onPress={() => Linking.openSettings()} hitSlop={8} accessibilityRole="button">
+              <Text style={s.noticeLink}>Open CyDrip settings</Text>
+            </Pressable>
+          </View>
+        ) : null}
+
         <Button
           title="Make a snap"
           onPress={() => router.push({ pathname: '/snap/[id]', params: { id: String(rideId) } })}
@@ -173,6 +188,17 @@ const s = StyleSheet.create({
   splitTrack: { flex: 1, height: 10, borderRadius: 5, backgroundColor: colors.asphalt, overflow: 'hidden' },
   splitBar: { height: 10, borderRadius: 5, backgroundColor: colors.kerb },
   splitPace: { width: 52, textAlign: 'right', color: colors.fog, fontFamily: fonts.num, fontSize: 18, fontVariant: ['tabular-nums'] },
+  notice: {
+    gap: space.sm,
+    padding: space.md,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.amber,
+    backgroundColor: 'rgba(255, 176, 32, 0.08)',
+  },
+  noticeTitle: { color: colors.amber, fontFamily: fonts.bodySemi, fontSize: type.body },
+  noticeBody: { color: colors.paper, fontFamily: fonts.body, fontSize: 15, lineHeight: 21 },
+  noticeLink: { color: colors.paper, fontFamily: fonts.bodySemi, fontSize: 15, textDecorationLine: 'underline' },
   delete: { alignSelf: 'flex-start', paddingVertical: space.sm },
   deleteText: { color: colors.rec, fontFamily: fonts.bodySemi, fontSize: type.body },
 });
