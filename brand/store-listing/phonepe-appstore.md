@@ -25,7 +25,7 @@ Developer policy: https://www.phonepeappstore.com/developer-policy/
 | Asset | Spec | File |
 | --- | --- | --- |
 | App icon | 512×512 PNG 32-bit, ≤1 MB, no rounded corners | `brand/icon/store-icon-512.png` |
-| Screenshots | 2–8, PNG/JPEG, ≤8 MB each | `brand/screenshots/1-speed.png` … `6-offline.png` |
+| Screenshots | 2–8, 1080×1920 PNG/JPEG, ≤8 MB each | All 8 in `brand/screenshots/`, uploaded in this order: `1-speed`, `7-directions`, `2-streets`, `8-where-to`, `3-screen-off`, `4-mapped`, `5-week`, `6-offline` |
 | Feature graphic | 1024×500 PNG/JPEG, ≤5 MB | `brand/banners/release-banner.png` |
 | Promo video | Optional | none |
 
@@ -35,7 +35,7 @@ CyDrip: Ride & Run Tracker
 
 ## Short description (≤200 characters)
 
-Free, open-source ride and run tracker. Big live speed, a 3D street map, GPS that records with the screen off, and share images. No account. Your rides stay on your phone.
+Free, open-source ride and run tracker. Big live speed, a 3D street map with turn-by-turn routes, GPS that records with the screen off, and share images. No account, no ads.
 
 ## Long description (≤4,000 characters)
 
@@ -47,6 +47,12 @@ RIDE
 • Simple view: a grid road view that works without mobile data
 • Portrait or landscape, for any handlebar mount
 • The screen stays on while you ride, and finishing takes a press-and-hold so a bump can't end your ride
+
+WHERE TO?
+• Search for a place, street or landmark and see the route on the map before you start
+• Cycling routes for rides, walking routes that can use footpaths for runs
+• The next turn, how far away it is and the distance left, always on screen
+• Take another way and CyDrip finds a new route from where you are
 
 RUN
 • Pick Run and the big number becomes your pace per kilometre
@@ -69,7 +75,8 @@ PRIVATE BY DESIGN
 • No account, no sign-up
 • No ads, no analytics, no tracking
 • Rides are stored only on your device
-• Location is used only while you record
+• Place search and routes come from free OpenStreetMap services, only when you use Where to?
+• Location is used only while you record or plan a route
 
 OPEN SOURCE
 CyDrip is MIT licensed and built in the open by Webrizen AI Labs:
