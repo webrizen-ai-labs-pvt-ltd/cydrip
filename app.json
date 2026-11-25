@@ -4,7 +4,7 @@
     "slug": "cydrip",
     "owner": "nextjsdevs-team",
     "scheme": "cydrip",
-    "version": "1.1.2",
+    "version": "1.2.0",
     "orientation": "default",
     "icon": "./assets/images/icon.png",
     "userInterfaceStyle": "dark",
@@ -15,7 +15,7 @@
     },
     "android": {
       "package": "com.webrizen.cydrip",
-      "versionCode": 4,
+      "versionCode": 5,
       "adaptiveIcon": {
         "backgroundColor": "#000000",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
