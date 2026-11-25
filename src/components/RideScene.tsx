@@ -16,24 +16,37 @@ export function RideScene({
   heading,
   distanceM,
   dimmed,
+  plan,
+  overview,
 }: {
   trail: [number, number][];
   position: { lat: number; lon: number } | null;
   heading: number | null;
   distanceM: number;
   dimmed?: boolean;
+  /** Planned route to a destination, if any. */
+  plan?: [number, number][] | null;
+  /** Show the whole planned route instead of chasing you. */
+  overview?: boolean;
 }) {
   const mode = useViewMode();
-  const showMap = MAP_AVAILABLE && mode === 'map' && position != null;
+  const hasPlan = plan != null && plan.length > 1;
+  const showMap = MAP_AVAILABLE && mode === 'map' && (position != null || hasPlan);
 
   return (
     <View style={styles.wrap}>
       {showMap ? (
-        <StreetMap track={trail} follow={{ ...position, heading }} dimmed={dimmed} />
+        <StreetMap
+          track={trail}
+          plan={plan}
+          follow={position ? { ...position, heading } : null}
+          overview={overview && hasPlan}
+          dimmed={dimmed}
+        />
       ) : (
         <FlexRoadView trail={trail} heading={heading} distanceM={distanceM} dimmed={dimmed} />
       )}
-      {MAP_AVAILABLE && position != null ? (
+      {MAP_AVAILABLE && (position != null || hasPlan) ? (
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={mode === 'map' ? 'Switch to simple view' : 'Switch to 3D map'}

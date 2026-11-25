@@ -22,6 +22,9 @@ No account, no ads, no tracking. Your rides stay on your phone.
   finishing is press-and-hold so a bump can't end the ride. Portrait or landscape.
 - **3D street map** — a tilted map that follows you, with real streets and 3D buildings from
   OpenStreetMap. Switch to **Simple view** (a grid road view) when you're out of data.
+- **Where to?** — search for a place and CyDrip draws the cycling (or walking, for runs) route on
+  the map, with the next turn, how far to it and the distance left. Leave the route and it finds a
+  new one from where you are.
 - **Running** — pick Ride or Run before you start. Runs show pace (min/km), get per-km splits, and
   don't keep the screen on, so the phone can stay in your pocket.
 - **Background recording** — GPS keeps recording with the screen off or another app open.
@@ -100,6 +103,8 @@ Issues and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 - Map data © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors, tiles by
   [OpenFreeMap](https://openfreemap.org) and OpenMapTiles.
+- Place search by [Photon](https://photon.komoot.io) (komoot); routes by
+  [Valhalla](https://github.com/valhalla/valhalla), served by [FOSSGIS e.V.](https://www.fossgis.de)
 - Typeface: [Barlow](https://fonts.google.com/specimen/Barlow), SIL Open Font License.
 
 ## License

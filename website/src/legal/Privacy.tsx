@@ -28,6 +28,7 @@ const SECTIONS: LegalSection[] = [
           <li>Your rides and runs: start and end time, distance, moving time, speed, climb and estimated calories.</li>
           <li>The GPS points of each route (position, altitude, speed and accuracy, about one per second).</li>
           <li>Your settings: body weight (used only to estimate calories), map view and last activity type.</li>
+          <li>The destination you pick in Where to? and its planned route, until you clear it or finish the activity.</li>
         </ul>
         <p>
           We never receive this data. Deleting an activity in the app removes it and its route. Uninstalling the app
@@ -73,6 +74,34 @@ const SECTIONS: LegalSection[] = [
     ),
   },
   {
+    id: 'directions',
+    title: 'Directions',
+    body: (
+      <>
+        <p>
+          Where to? is optional, and nothing is sent until you use it. Then the app talks to two free OpenStreetMap
+          services that need no account:
+        </p>
+        <ul>
+          <li>
+            <strong>Place search</strong> by <a href="https://photon.komoot.io">Photon</a>, run by komoot. It receives
+            what you type and your position rounded to about 1 km, so nearby places come first.
+          </li>
+          <li>
+            <strong>Routes</strong> by <a href="https://valhalla1.openstreetmap.de">Valhalla</a>, run by{' '}
+            <a href="https://www.fossgis.de">FOSSGIS e.V.</a> It receives where the route starts (your position at the
+            time) and the destination you picked. If you leave the route during an activity, the app asks again from
+            where you are.
+          </li>
+        </ul>
+        <p>
+          Like any website, both also see your IP address. Neither receives your recorded rides or runs, and CyDrip
+          sends no identifier with these requests.
+        </p>
+      </>
+    ),
+  },
+  {
     id: 'sharing',
     title: 'Sharing and photos',
     body: (
@@ -97,7 +126,7 @@ const SECTIONS: LegalSection[] = [
           <strong>Photos (add only)</strong>: when you save a Snap to your gallery.
         </li>
         <li>
-          <strong>Internet</strong>: to load map tiles.
+          <strong>Internet</strong>: to load map tiles and, when you use Where to?, to search places and plan routes.
         </li>
       </ul>
     ),
@@ -154,7 +183,7 @@ export function Privacy() {
         ['Account', 'None. Nothing to sign up for.'],
         ['Your data', 'Stored only on your device'],
         ['Analytics and ads', 'None'],
-        ['Network', 'Map tiles from OpenFreeMap only'],
+        ['Network', 'Map tiles, plus place search and routes when you use Where to?'],
       ]}
       sections={SECTIONS}
     />

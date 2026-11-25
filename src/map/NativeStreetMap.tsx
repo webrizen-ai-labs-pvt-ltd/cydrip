@@ -5,17 +5,37 @@ import { useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { colors, fonts } from '@/theme';
+import { DestPin } from './DestPin';
 import { YouArrow } from './YouArrow';
-import { ATTRIBUTION, FOLLOW, MAP_STYLE, ROUTE_GLOW, ROUTE_LAYOUT, ROUTE_LINE, routeGeoJSON, trackBounds } from './style';
+import {
+  ATTRIBUTION,
+  FOLLOW,
+  MAP_STYLE,
+  PLAN_LINE,
+  ROUTE_GLOW,
+  ROUTE_LAYOUT,
+  ROUTE_LINE,
+  routeGeoJSON,
+  trackBounds,
+} from './style';
 import type { StreetMapProps } from './types';
 
-export function NativeStreetMap({ track, follow, interactive = false, dimmed, style }: StreetMapProps) {
+export function NativeStreetMap({ track, plan, follow, overview, interactive = false, dimmed, style }: StreetMapProps) {
   const [height, setHeight] = useState(0);
   const route = useMemo(() => routeGeoJSON(track), [track]);
-  const bounds = useMemo(() => (track.length > 1 ? trackBounds(track) : null), [track]);
+  const planned = useMemo(() => (plan && plan.length > 1 ? routeGeoJSON(plan) : null), [plan]);
+  const dest = plan && plan.length > 1 ? plan[plan.length - 1] : null;
+  const lat = follow?.lat;
+  const lon = follow?.lon;
+  const bounds = useMemo(() => {
+    const all = [...(plan ?? []), ...track, ...(lat != null && lon != null ? [[lat, lon] as [number, number]] : [])];
+    return all.length > 1 ? trackBounds(all) : null;
+    // Overview reframes as you move only when the route changes, not every fix.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plan, track, overview ? null : lat, overview ? null : lon]);
 
   // Follow: you sit ~70% down the view so most of the screen shows what's ahead.
-  const camera = follow
+  const camera = follow && !overview
     ? {
         center: [follow.lon, follow.lat] as [number, number],
         zoom: FOLLOW.zoom,
@@ -26,7 +46,7 @@ export function NativeStreetMap({ track, follow, interactive = false, dimmed, st
         easing: 'linear' as const,
       }
     : bounds
-      ? { bounds, padding: { top: 48, bottom: 48, left: 32, right: 32 }, pitch: 40, duration: 0 }
+      ? { bounds, padding: { top: 56, bottom: 48, left: 40, right: 40 }, pitch: overview ? 30 : 40, bearing: 0, duration: 600 }
       : null;
 
   return (
@@ -45,11 +65,21 @@ export function NativeStreetMap({ track, follow, interactive = false, dimmed, st
         attribution={false}
       >
         {camera ? <Camera {...camera} /> : null}
+        {planned ? (
+          <GeoJSONSource id="plan" data={planned}>
+            <Layer id="plan-line" type="line" layout={ROUTE_LAYOUT} paint={PLAN_LINE as never} />
+          </GeoJSONSource>
+        ) : null}
         {track.length > 1 ? (
           <GeoJSONSource id="route" data={route}>
             <Layer id="route-glow" type="line" layout={ROUTE_LAYOUT} paint={ROUTE_GLOW as never} />
             <Layer id="route-line" type="line" layout={ROUTE_LAYOUT} paint={ROUTE_LINE as never} />
           </GeoJSONSource>
+        ) : null}
+        {dest ? (
+          <Marker lngLat={[dest[1], dest[0]]} anchor="center">
+            <DestPin />
+          </Marker>
         ) : null}
         {follow ? (
           <Marker lngLat={[follow.lon, follow.lat]} anchor="center">

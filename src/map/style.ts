@@ -124,6 +124,13 @@ export const ROUTE_LINE = {
   'line-width': ['interpolate', ['exponential', 2], ['zoom'], 12, 2.5, 17, 7, 19, 20],
 } as const;
 
+/** The planned route: quiet white, so your own blue track reads on top of it. */
+export const PLAN_LINE = {
+  'line-color': colors.paper,
+  'line-opacity': 0.5,
+  'line-width': ['interpolate', ['exponential', 2], ['zoom'], 12, 3, 17, 9, 19, 26],
+} as const;
+
 export const ROUTE_LAYOUT = { 'line-cap': 'round', 'line-join': 'round' } as const;
 
 /** Chase-camera framing used while riding. */
@@ -141,10 +148,10 @@ export function routeGeoJSON(track: Track): GeoJSON.Feature<GeoJSON.LineString> 
   };
 }
 
-/** [west, south, east, north] around a track. */
-export function trackBounds(track: Track): [number, number, number, number] {
+/** [west, south, east, north] around one or more tracks. */
+export function trackBounds(...tracks: Track[]): [number, number, number, number] {
   let w = Infinity, s = Infinity, e = -Infinity, n = -Infinity;
-  for (const [lat, lon] of track) {
+  for (const [lat, lon] of tracks.flat()) {
     w = Math.min(w, lon);
     e = Math.max(e, lon);
     s = Math.min(s, lat);

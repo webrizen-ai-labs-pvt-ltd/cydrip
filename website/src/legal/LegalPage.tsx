@@ -4,7 +4,7 @@ import { Bar, Footer } from '../components/Chrome';
 
 export type LegalSection = { id: string; title: string; body: ReactNode };
 
-export const UPDATED = '20 November 2026';
+export const UPDATED = '26 November 2026';
 
 /** Shared layout for the privacy policy and terms: contents on the left, text on the right. */
 export function LegalPage({

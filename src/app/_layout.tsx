@@ -10,6 +10,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 
 import { getDb } from '@/lib/db';
+import { loadPlan } from '@/lib/navigate';
 import { loadSettings } from '@/lib/settings';
 // Importing the tracker also registers the background GPS task before any screen renders.
 import { reconcileRide } from '@/lib/tracker';
@@ -43,7 +44,7 @@ export default function RootLayout() {
 
   useEffect(() => {
     // Open storage, restore settings and any ride in progress before the first screen renders.
-    Promise.all([getDb(), loadSettings(), reconcileRide()])
+    Promise.all([getDb(), loadSettings(), loadPlan(), reconcileRide()])
       .catch((e) => console.warn('[cydrip] startup failed', e))
       .finally(() => setReady(true));
   }, []);
@@ -68,6 +69,7 @@ export default function RootLayout() {
       >
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="ride/[id]" options={{ title: '' }} />
+        <Stack.Screen name="destination" options={{ title: 'Where to?', presentation: 'modal' }} />
         <Stack.Screen name="snap/[id]" options={{ headerShown: false, presentation: 'fullScreenModal' }} />
       </Stack>
     </ThemeProvider>

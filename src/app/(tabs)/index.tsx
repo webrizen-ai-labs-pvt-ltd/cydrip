@@ -6,13 +6,15 @@ import { useCallback, useEffect, useState } from 'react';
 import { Alert, Linking, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { PauseIcon, PlayIcon } from '@/components/Icons';
+import { GuidanceBanner } from '@/components/Guidance';
+import { CloseIcon, PauseIcon, PlayIcon, SearchIcon } from '@/components/Icons';
 import { Lockup } from '@/components/Mark';
 import { RideScene } from '@/components/RideScene';
 import { Button, Hairline, HoldButton, Metric, Segmented } from '@/components/ui';
 import { ACTIVITY, ActivityKind } from '@/lib/activity';
 import { listRides } from '@/lib/db';
 import { avgSpeed, estimateCalories, fmtDuration, fmtDurationShort, fmtKm, fmtPace, fmtSpeed } from '@/lib/format';
+import { clearPlan, type Plan, planRoute, usePlan } from '@/lib/navigate';
 import { getLastKind, getWeightKg, setLastKind } from '@/lib/settings';
 import {
   ActiveRide,
@@ -38,9 +40,10 @@ export default function RideScreen() {
 
   useEffect(() => {
     if (!keepAwake) return;
-    activateKeepAwakeAsync(KEEP_AWAKE_TAG);
+    // Best effort: some browsers refuse a wake lock, and then there's nothing to release either.
+    activateKeepAwakeAsync(KEEP_AWAKE_TAG).catch(() => {});
     return () => {
-      deactivateKeepAwake(KEEP_AWAKE_TAG);
+      deactivateKeepAwake(KEEP_AWAKE_TAG).catch(() => {});
     };
   }, [keepAwake]);
 
@@ -77,6 +80,16 @@ function Idle() {
   const [starting, setStarting] = useState(false);
   const [kind, setKind] = useState<ActivityKind>(getLastKind);
   const noun = kind === 'run' ? 'run' : 'ride';
+  const plan = usePlan();
+
+  // Switching ride / run re-plans the route: bikes and feet are allowed on different roads.
+  const fixLat = gps.fix?.lat;
+  const fixLon = gps.fix?.lon;
+  useEffect(() => {
+    if (plan && plan.kind !== kind && plan.status !== 'routing' && fixLat != null && fixLon != null) {
+      planRoute(plan.place, [fixLat, fixLon], kind);
+    }
+  }, [plan, kind, fixLat, fixLon]);
 
   function pick(k: ActivityKind) {
     setKind(k);
@@ -127,6 +140,8 @@ function Idle() {
         position={gps.fix}
         heading={gps.fix?.heading ?? null}
         distanceM={0}
+        plan={plan?.route?.shape}
+        overview
       />
 
       <View style={s.idleBody}>
@@ -141,6 +156,7 @@ function Idle() {
 
         <View style={{ gap: space.md }}>
           <GpsLine accuracy={gps.accuracy} />
+          <WhereTo plan={plan} kind={kind} />
           <Segmented
             options={[
               { value: 'ride', label: 'Ride' },
@@ -162,6 +178,48 @@ function Idle() {
           ) : null}
         </View>
       </View>
+    </View>
+  );
+}
+
+/** "Where to?" before a ride; once picked, the destination with its distance and time. */
+function WhereTo({ plan, kind }: { plan: Plan | null; kind: ActivityKind }) {
+  const open = () => router.push({ pathname: '/destination', params: { kind } });
+  if (!plan) {
+    return (
+      <Pressable
+        accessibilityRole="button"
+        onPress={open}
+        style={({ pressed }) => [s.whereTo, { opacity: pressed ? 0.7 : 1 }]}
+      >
+        <SearchIcon size={20} color={colors.fog} />
+        <Text style={s.whereToText}>Where to?</Text>
+      </Pressable>
+    );
+  }
+  const r = plan.route;
+  const by = kind === 'run' ? 'on foot' : 'by bike';
+  const sub =
+    plan.status === 'routing'
+      ? 'Finding the way…'
+      : plan.status === 'error'
+        ? plan.error ?? 'No route.'
+        : r
+          ? `${fmtKm(r.lengthM, 1)} km · about ${fmtDurationShort(r.timeS * 1000)} ${by}`
+          : '';
+  return (
+    <View style={s.whereTo}>
+      <Pressable accessibilityRole="button" accessibilityHint="Change destination" onPress={open} style={{ flex: 1 }}>
+        <Text style={s.destName} numberOfLines={1}>
+          To {plan.place.name}
+        </Text>
+        <Text style={[s.fogText, { fontSize: 14 }, plan.status === 'error' && { color: colors.amber }]} numberOfLines={1}>
+          {sub}
+        </Text>
+      </Pressable>
+      <Pressable accessibilityRole="button" accessibilityLabel="Clear route" onPress={clearPlan} hitSlop={12}>
+        <CloseIcon size={20} color={colors.fog} />
+      </Pressable>
     </View>
   );
 }
@@ -246,6 +304,7 @@ function Dashboard({ ride }: { ride: ActiveRide }) {
   const noun = run ? 'run' : 'ride';
   const avg = avgSpeed(ride.distanceM, ride.movingMs);
   const kcal = estimateCalories(ride.kind, ride.distanceM, ride.movingMs, getWeightKg());
+  const plan = usePlan();
 
   async function onPauseResume() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -258,6 +317,7 @@ function Dashboard({ ride }: { ride: ActiveRide }) {
   }
 
   async function save() {
+    clearPlan();
     const id = await finishActiveRide(true);
     // Straight to the snap card; it continues to the activity page.
     if (id != null) router.push({ pathname: '/snap/[id]', params: { id: String(id), fresh: '1' } });
@@ -268,7 +328,14 @@ function Dashboard({ ride }: { ride: ActiveRide }) {
       Alert.alert(`Discard this ${noun}?`, 'It is shorter than 50 m.', [
         { text: run ? 'Keep running' : 'Keep riding', style: 'cancel' },
         { text: 'Save anyway', onPress: save },
-        { text: 'Discard', style: 'destructive', onPress: () => finishActiveRide(false) },
+        {
+          text: 'Discard',
+          style: 'destructive',
+          onPress: () => {
+            clearPlan();
+            finishActiveRide(false);
+          },
+        },
       ]);
       return;
     }
@@ -277,13 +344,30 @@ function Dashboard({ ride }: { ride: ActiveRide }) {
 
   const state = !recording ? 'Paused' : ride.moving ? 'Recording' : 'Stopped, timer on hold';
   const scene = (
-    <RideScene
-      trail={ride.trail}
-      position={ride.lastFix}
-      heading={ride.heading}
-      distanceM={ride.distanceM}
-      dimmed={!recording}
-    />
+    <View style={{ flex: 1 }}>
+      {plan ? <GuidanceBanner ride={ride} plan={plan} /> : null}
+      <View style={{ flex: 1 }}>
+        <RideScene
+          trail={ride.trail}
+          position={ride.lastFix}
+          heading={ride.heading}
+          distanceM={ride.distanceM}
+          dimmed={!recording}
+          plan={plan?.route?.shape}
+        />
+        {!plan ? (
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => router.push({ pathname: '/destination', params: { kind: ride.kind } })}
+            hitSlop={10}
+            style={({ pressed }) => [s.mapPill, { opacity: pressed ? 0.7 : 1 }]}
+          >
+            <SearchIcon size={14} color={colors.paper} />
+            <Text style={s.mapPillText}>Where to?</Text>
+          </Pressable>
+        ) : null}
+      </View>
+    </View>
   );
 
   const gpsWeak = recording && ride.accuracy != null && ride.accuracy > 20;
@@ -403,6 +487,35 @@ const s = StyleSheet.create({
   fogText: { color: colors.fog, fontFamily: fonts.body, fontSize: type.body },
   link: { color: colors.fog, fontFamily: fonts.bodyMedium, fontSize: 15, textDecorationLine: 'underline' },
   gpsRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  whereTo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm + 4,
+    minHeight: 56,
+    paddingHorizontal: space.md,
+    paddingVertical: space.sm,
+    borderRadius: 12,
+    backgroundColor: colors.asphalt,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.kerb,
+  },
+  whereToText: { color: colors.fog, fontFamily: fonts.bodyMedium, fontSize: 17 },
+  destName: { color: colors.paper, fontFamily: fonts.bodySemi, fontSize: 17 },
+  mapPill: {
+    position: 'absolute',
+    top: 12,
+    left: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 999,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.kerb,
+  },
+  mapPillText: { color: colors.paper, fontFamily: fonts.bodyMedium, fontSize: 13 },
   dot: { width: 8, height: 8, borderRadius: 4 },
 
   dashPad: { paddingHorizontal: space.lg, paddingVertical: space.md },
