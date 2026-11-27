@@ -27,6 +27,10 @@ const SECTIONS: LegalSection[] = [
         <ul>
           <li>Your rides and runs: start and end time, distance, moving time, speed, climb and estimated calories.</li>
           <li>The GPS points of each route (position, altitude, speed and accuracy, about one per second).</li>
+          <li>
+            A log of every GPS fix the phone delivered during each activity, used to show how well GPS worked. It
+            leaves your phone only if you tap Share GPS log.
+          </li>
           <li>Your settings: body weight (used only to estimate calories), map view and last activity type.</li>
           <li>The destination you pick in Where to? and its planned route, until you clear it or finish the activity.</li>
         </ul>

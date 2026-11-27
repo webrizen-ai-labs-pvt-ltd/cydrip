@@ -91,7 +91,12 @@ export function measuredSpeed(speed: number | null | undefined): number | null {
   return speed != null && speed > 0.3 ? speed : null;
 }
 
-export type OdoConfig = { movingSpeed: number; maxSpeed: number };
+export type OdoConfig = {
+  movingSpeed: number;
+  maxSpeed: number;
+  /** Typical speed, used to estimate moving time when sparse fixes can't tell. */
+  cruiseSpeed: number;
+};
 
 export type OdoState = {
   /** Smoothed position after the last accepted fix. */
@@ -100,8 +105,6 @@ export type OdoState = {
   anchor: Smoothed | null;
   moving: boolean;
   speed: number;
-  /** Total time with no accepted fix for more than 10 s (the phone throttling GPS). */
-  gapMs: number;
 };
 
 export type OdoStep = {
@@ -114,7 +117,7 @@ export type OdoStep = {
   speedSample: number | null;
 };
 
-export const newOdometer = (): OdoState => ({ filt: null, anchor: null, moving: false, speed: 0, gapMs: 0 });
+export const newOdometer = (): OdoState => ({ filt: null, anchor: null, moving: false, speed: 0 });
 
 /**
  * Turns fixes into distance and moving time.
@@ -130,7 +133,11 @@ export function odometer(state: OdoState, fix: Fix, cfg: OdoConfig): OdoStep {
   const prev = state.filt;
   const none = { addDistance: 0, addMovingMs: 0, speedSample: null };
 
-  if (prev && fix.ts > prev.ts) {
+  // A fix older than one already used arrived late (Android can deliver out of order): skip it.
+  // Restarting from it would jump the position back and count that stretch twice.
+  if (prev && fix.ts <= prev.ts) return { state, rejected: true, ...none };
+
+  if (prev) {
     // A jump faster than anything this activity can do is a bad fix: ignore it entirely.
     const dt = (fix.ts - prev.ts) / 1000;
     const jump = distanceM(prev.lat, prev.lon, fix.lat, fix.lon);
@@ -138,19 +145,16 @@ export function odometer(state: OdoState, fix: Fix, cfg: OdoConfig): OdoStep {
   }
 
   const filt = kalman(prev, { ...fix, speed, heading });
-  if (!prev || fix.ts <= prev.ts) {
-    return { state: { ...state, filt, anchor: filt }, rejected: false, ...none };
-  }
+  if (!prev) return { state: { ...state, filt, anchor: filt }, rejected: false, ...none };
 
   const dt = (filt.ts - prev.ts) / 1000;
-  const gapMs = state.gapMs + (dt > 10 ? (dt - 1) * 1000 : 0);
 
   // Frequent fixes with a real GPS speed: integrate that speed.
   if (speed != null && dt <= 5) {
     const moving = speed >= cfg.movingSpeed;
     const step = stepDistance(prev, filt, speed);
     return {
-      state: { filt, anchor: filt, moving, speed: moving ? speed : 0, gapMs },
+      state: { filt, anchor: filt, moving, speed: moving ? speed : 0 },
       rejected: false,
       addDistance: moving ? step : 0,
       addMovingMs: moving ? dt * 1000 : 0,
@@ -167,17 +171,20 @@ export function odometer(state: OdoState, fix: Fix, cfg: OdoConfig): OdoStep {
   const gate = Math.max(12, 1.5 * fix.acc, 1.5 * Math.sqrt(anchor.variance));
   if (d >= gate && span >= 5) {
     const v = d / span;
-    if (v >= cfg.movingSpeed * 0.6 && v <= cfg.maxSpeed) {
-      return {
-        state: { filt, anchor: filt, moving: true, speed: v, gapMs },
-        rejected: false,
-        addDistance: d,
-        addMovingMs: Math.min(span, 120) * 1000,
-        speedSample: v,
-      };
+    if (v > cfg.maxSpeed) {
+      // Implausibly fast: move on without counting.
+      return { state: { filt, anchor: filt, moving: false, speed: 0 }, rejected: false, ...none };
     }
-    // Too slow to be travel (drift over a long stop) or implausibly fast: move on without counting.
-    return { state: { filt, anchor: filt, moving: false, speed: 0, gapMs }, rejected: false, ...none };
+    // Clearly moved: count it. A slow average usually means a stop and then riding on (a red
+    // light), so moving time is the distance at a typical speed rather than the whole span.
+    const steady = v >= cfg.movingSpeed * 0.6;
+    return {
+      state: { filt, anchor: filt, moving: true, speed: steady ? v : cfg.cruiseSpeed },
+      rejected: false,
+      addDistance: d,
+      addMovingMs: (steady ? Math.min(span, 120) : Math.min(span, d / cfg.cruiseSpeed)) * 1000,
+      speedSample: steady ? v : null,
+    };
   }
   // Not clearly moved yet. Keep the anchor; after a minute without progress you've stopped.
   const stopped = span > 60;
@@ -187,7 +194,6 @@ export function odometer(state: OdoState, fix: Fix, cfg: OdoConfig): OdoStep {
       anchor: stopped ? filt : anchor,
       moving: stopped ? false : state.moving,
       speed: stopped ? 0 : state.speed,
-      gapMs,
     },
     rejected: false,
     ...none,

@@ -5,8 +5,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { downsample, LineChart } from '@/components/LineChart';
 import { RouteTrace } from '@/components/RouteTrace';
-import { Button, Hairline, Metric } from '@/components/ui';
-import { deleteRide, getPoints, getRide, Point, Ride } from '@/lib/db';
+import { Button, DefRow, Hairline, Metric } from '@/components/ui';
+import { deleteRide, getFixes, getPoints, getRide, Point, RawFix, Ride } from '@/lib/db';
+import { shareGpsLog, summarize } from '@/lib/gpsLog';
 import { avgSpeed, fmtDate, fmtDuration, fmtKm, fmtPace, fmtSpeed, fmtTime, msToKmh } from '@/lib/format';
 import { useViewMode } from '@/lib/settings';
 import { computeSplits, splitSpeed } from '@/lib/splits';
@@ -22,11 +23,14 @@ export default function ActivityDetail() {
   const viewMode = useViewMode();
   const [ride, setRide] = useState<Ride | null>(null);
   const [points, setPoints] = useState<Point[]>([]);
+  const [fixes, setFixes] = useState<RawFix[]>([]);
 
   useEffect(() => {
     getRide(rideId).then(setRide);
     getPoints(rideId).then(setPoints);
+    getFixes(rideId).then(setFixes);
   }, [rideId]);
+  const gps = useMemo(() => summarize(fixes), [fixes]);
 
   const run = ride?.kind === 'run';
   const trail = useMemo(() => points.map((p) => [p.lat, p.lon] as [number, number]), [points]);
@@ -110,15 +114,24 @@ export default function ActivityDetail() {
         {ride.gap_ms > 60000 ? (
           <View style={s.notice} accessibilityRole="alert">
             <Text style={s.noticeTitle}>
-              Your phone held back GPS for {Math.round(ride.gap_ms / 60000)} min of this {noun}
+              No GPS fix for {Math.round(ride.gap_ms / 60000)} min of this {noun}
             </Text>
             <Text style={s.noticeBody}>
-              Distance and route may be short. To fix it, open CyDrip&apos;s settings and set Battery saver to No
-              restrictions. On Xiaomi, Redmi and POCO phones, also turn on Autostart.
+              Distance and route may read short. Phones pause GPS to save battery, mostly with the screen off. Keep
+              CyDrip on screen if you can, set its Battery saver to No restrictions, and on Xiaomi, Redmi and POCO
+              phones turn on Autostart.
             </Text>
             <Pressable onPress={() => Linking.openSettings()} hitSlop={8} accessibilityRole="button">
               <Text style={s.noticeLink}>Open CyDrip settings</Text>
             </Pressable>
+          </View>
+        ) : ride.weak_ms > 60000 ? (
+          <View style={s.notice} accessibilityRole="alert">
+            <Text style={s.noticeTitle}>Weak GPS for {Math.round(ride.weak_ms / 60000)} min of this {noun}</Text>
+            <Text style={s.noticeBody}>
+              Fixes came but were too imprecise to use, which happens near tall buildings and under trees. Distance
+              may read short.
+            </Text>
           </View>
         ) : null}
 
@@ -163,6 +176,40 @@ export default function ActivityDetail() {
           <View style={s.chart}>
             <Text style={s.chartTitle}>Elevation</Text>
             <LineChart id="elev" values={elev} width={chartW} height={100} unit="m" color={colors.fog} />
+          </View>
+        ) : null}
+
+        {gps ? (
+          <View style={s.chart}>
+            <Text style={s.chartTitle}>GPS</Text>
+            <View>
+              <DefRow
+                label="Fixes"
+                value={gps.fixes.toLocaleString()}
+                detail={`Typically every ${gps.every < 10 ? gps.every.toFixed(1) : Math.round(gps.every)} s`}
+              />
+              <Hairline />
+              <DefRow label="Waiting over 5 s for a fix" value={`${Math.round(gps.sparse * 100)}% of the time`} />
+              <Hairline />
+              <DefRow label="Typical accuracy" value={gps.accuracy != null ? `±${Math.round(gps.accuracy)} m` : '–'} />
+              <Hairline />
+              <DefRow label="With measured speed" value={`${Math.round(gps.withSpeed * 100)}%`} />
+              <Hairline />
+              <DefRow
+                label="Arrived on screen"
+                value={`${Math.round(gps.onScreen * 100)}%`}
+                detail={gps.delayed > 0.02 ? `${Math.round(gps.delayed * 100)}% arrived over 5 s late` : undefined}
+              />
+            </View>
+            <Button
+              title="Share GPS log"
+              variant="quiet"
+              onPress={() =>
+                shareGpsLog(ride, fixes).catch((e) =>
+                  Alert.alert("Couldn't share the GPS log", String(e instanceof Error ? e.message : e)),
+                )
+              }
+            />
           </View>
         ) : null}
 

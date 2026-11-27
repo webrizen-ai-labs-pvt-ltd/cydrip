@@ -9,7 +9,7 @@ import { useSyncExternalStore } from 'react';
 
 import { colors } from '@/theme';
 import { ACTIVITY, ActivityKind, isKind } from './activity';
-import { createRide, deleteRide, finishRide, getPoints, insertPoint, setPreview } from './db';
+import { createRide, deleteRide, finishRide, getPoints, insertFix, insertPoint, setPreview } from './db';
 import { activityTitle, bearing, estimateCalories, simplifyTrack } from './format';
 import { type Altitude, climb, measuredSpeed, newOdometer, odometer, type OdoState, sustainedSpeed } from './gpsFilter';
 import { getWeightKg } from './settings';
@@ -46,6 +46,12 @@ export type ActiveRide = {
   lastFix: { lat: number; lon: number; ts: number } | null;
   /** Smoothing filter and distance counter; reset at the start of each recording segment. */
   odo: OdoState;
+  /** Time of the newest fix received (used or not); null at the start of each segment. */
+  heardTs: number | null;
+  /** Time with no fix at all for over 10 s, ms. */
+  gapMs: number;
+  /** Time when fixes came but were too imprecise to use, ms. */
+  weakMs: number;
   /** Last few moving speeds, so one glitchy reading can't set max speed. */
   recentSpeeds: number[];
   alt: Altitude;
@@ -75,6 +81,9 @@ function loadActiveRide(): Promise<void> {
           // Rides saved by older versions: restart the filter from the next fix.
           odo: r.odo ?? newOdometer(),
           lastFix: r.odo ? r.lastFix : null,
+          heardTs: r.heardTs ?? null,
+          gapMs: r.gapMs ?? (r.odo as { gapMs?: number } | undefined)?.gapMs ?? 0,
+          weakMs: r.weakMs ?? 0,
           recentSpeeds: r.recentSpeeds ?? [],
           alt: r.alt ?? { smooth: null, ref: null, gain: r.elevGain ?? 0 },
         };
@@ -116,25 +125,42 @@ export function elapsedMs(r: ActiveRide, now = Date.now()): number {
 // ---------- GPS processing ----------
 let queue = Promise.resolve();
 
-function handleLocations(locations: Location.LocationObject[]) {
+type Source = 'watch' | 'task' | 'demo';
+
+function handleLocations(locations: Location.LocationObject[], src: Source) {
+  const recv = Date.now();
+  // Oldest first: a batch can arrive in any order.
+  const sorted = [...locations].sort((a, b) => a.timestamp - b.timestamp);
   queue = queue
     .then(async () => {
       await loadActiveRide(); // the task can wake before the app has restored its state
-      for (const loc of locations) await processFix(loc);
+      for (const loc of sorted) await processFix(loc, src, recv);
     })
     .catch((e) => console.warn('[cydrip] fix processing failed', e));
 }
 
-async function processFix(loc: Location.LocationObject) {
+async function processFix(loc: Location.LocationObject, src: Source, recv: number) {
   const r = state;
-  if (!r || r.status !== 'recording') return;
+  if (!r) return;
   const { latitude, longitude, altitude, altitudeAccuracy, accuracy, speed: gpsSpeed, heading: gpsHeading } = loc.coords;
   const ts = loc.timestamp;
+  // Every fix goes in the GPS log, with what we did with it, so problems can be diagnosed.
+  const log = (verdict: string) =>
+    insertFix(r.rideId, {
+      ts, recv, src, lat: latitude, lon: longitude, acc: accuracy, speed: gpsSpeed, heading: gpsHeading, alt: altitude, verdict,
+    }).catch((e) => console.warn('[cydrip] could not log fix', e));
+  if (r.status !== 'recording') return log('paused');
+  // The same fix arrives twice when both the on-screen and the background feed are running,
+  // and a delayed batch can bring fixes older than ones already used.
+  if (r.heardTs != null && ts <= r.heardTs) return log(ts === r.heardTs ? 'dup' : 'late');
+
+  const since = r.heardTs != null ? ts - r.heardTs : 0;
+  const heard = { heardTs: ts, gapMs: r.gapMs + (since > 10_000 ? since - 1000 : 0) };
   // Warm-up: the first fix of a segment must be reasonable; after that, only drop useless ones.
   const limit = r.odo.filt ? MAX_ACCURACY : FIRST_FIX_ACCURACY;
   if (accuracy != null && accuracy > limit) {
-    set({ ...r, accuracy });
-    return;
+    set({ ...r, ...heard, accuracy, weakMs: r.weakMs + Math.min(since, 10_000) });
+    return log('weak');
   }
 
   const cfg = ACTIVITY[r.kind];
@@ -143,10 +169,14 @@ async function processFix(loc: Location.LocationObject) {
     { lat: latitude, lon: longitude, acc: accuracy ?? 25, ts, speed: gpsSpeed, heading: gpsHeading },
     cfg,
   );
-  if (step.rejected) return;
+  if (step.rejected) {
+    set({ ...r, ...heard });
+    return log('jump');
+  }
+  log('used');
   const odo = step.state;
   const filt = odo.filt!;
-  const next: ActiveRide = { ...r, accuracy, odo };
+  const next: ActiveRide = { ...r, ...heard, accuracy, odo };
 
   next.distanceM += step.addDistance;
   next.movingMs += step.addMovingMs;
@@ -182,7 +212,7 @@ TaskManager.defineTask<{ locations: Location.LocationObject[] }>(RIDE_TASK, asyn
     console.warn('[cydrip] location task error', error.message);
     return;
   }
-  if (data?.locations?.length) handleLocations(data.locations);
+  if (data?.locations?.length) handleLocations(data.locations, 'task');
 });
 
 // ---------- demo ride (dev only) ----------
@@ -223,7 +253,7 @@ function startDemoFeed() {
   // Continue from where the ride is (e.g. after an app restart), not from the origin.
   const last = state?.lastFix;
   if (last) demoPos = { lat: last.lat, lon: last.lon, heading: state?.heading ?? demoPos.heading };
-  demoTimer = setInterval(() => handleLocations([demoFix(Date.now())]), 1000);
+  demoTimer = setInterval(() => handleLocations([demoFix(Date.now())], 'demo'), 1000);
 }
 
 function stopDemoFeed() {
@@ -240,7 +270,10 @@ export async function startDemoRide(kind: ActivityKind = 'ride'): Promise<void> 
   demoPos = { ...DEMO_ORIGIN, heading: 20 };
   const rideId = await createRide(activityTitle(startedAt, kind), startedAt, kind);
   set(newRide(rideId, startedAt, kind, true));
-  handleLocations(Array.from({ length: history }, (_, i) => demoFix(startedAt + i * 1000)));
+  handleLocations(
+    Array.from({ length: history }, (_, i) => demoFix(startedAt + i * 1000)),
+    'demo',
+  );
   await queue;
   startDemoFeed();
 }
@@ -265,6 +298,9 @@ function newRide(rideId: number, startedAt: number, kind: ActivityKind, demo = f
     heading: null,
     lastFix: null,
     odo: newOdometer(),
+    heardTs: null,
+    gapMs: 0,
+    weakMs: 0,
     recentSpeeds: [],
     alt: { smooth: null, ref: null, gain: 0 },
     trail: [],
@@ -272,8 +308,33 @@ function newRide(rideId: number, startedAt: number, kind: ActivityKind, demo = f
   };
 }
 
+// While CyDrip is on screen, fixes also come straight from the GPS callback. The background task
+// delivers each fix through Android's job scheduler, which some phones (MIUI especially) delay,
+// batch or drop; the direct feed doesn't go through it. Duplicates are skipped by timestamp.
+let watch: Location.LocationSubscription | null = null;
+
+async function startWatch() {
+  if (watch || state?.demo) return;
+  try {
+    const sub = await Location.watchPositionAsync(
+      { accuracy: Location.Accuracy.BestForNavigation, timeInterval: 1000, distanceInterval: 0 },
+      (loc) => handleLocations([loc], 'watch'),
+    );
+    if (watch || state?.status !== 'recording') sub.remove();
+    else watch = sub;
+  } catch (e) {
+    console.warn('[cydrip] could not start the on-screen GPS feed', e);
+  }
+}
+
+function stopWatch() {
+  watch?.remove();
+  watch = null;
+}
+
 async function startUpdates() {
   if (state?.demo) return startDemoFeed();
+  await startWatch();
   if (await Location.hasStartedLocationUpdatesAsync(RIDE_TASK)) return;
   await Location.startLocationUpdatesAsync(RIDE_TASK, {
     accuracy: Location.Accuracy.BestForNavigation,
@@ -293,6 +354,7 @@ async function startUpdates() {
 
 async function stopUpdates() {
   stopDemoFeed();
+  stopWatch();
   try {
     if (await Location.hasStartedLocationUpdatesAsync(RIDE_TASK)) {
       await Location.stopLocationUpdatesAsync(RIDE_TASK);
@@ -340,7 +402,8 @@ export async function resumeRide(): Promise<void> {
     status: 'recording',
     segmentStart: Date.now(),
     lastFix: null,
-    odo: { ...newOdometer(), gapMs: r.odo.gapMs },
+    odo: newOdometer(),
+    heardTs: null,
     recentSpeeds: [],
   });
   await startUpdates();
@@ -379,7 +442,8 @@ export async function finishActiveRide(save: boolean): Promise<number | null> {
     max_speed: Math.max(final.maxSpeed, final.movingMs > 0 ? final.distanceM / (final.movingMs / 1000) : 0),
     elev_gain: final.elevGain,
     calories: estimateCalories(final.kind, final.distanceM, final.movingMs, weight),
-    gap_ms: Math.round(final.odo.gapMs),
+    gap_ms: Math.round(final.gapMs),
+    weak_ms: Math.round(final.weakMs),
   });
   const pts = await getPoints(final.rideId);
   await setPreview(final.rideId, simplifyTrack(pts.map((p) => [p.lat, p.lon])));
