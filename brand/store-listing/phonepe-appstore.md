@@ -11,13 +11,13 @@ Developer policy: https://www.phonepeappstore.com/developer-policy/
 | --- | --- |
 | Upload type | Upload File Directly (not on Google Play) |
 | Package | `com.webrizen.cydrip` |
-| File | `CyDrip-1.2.0.apk` from GitHub Releases (release-signed by EAS; same key for every update) |
+| File | `CyDrip-1.2.1.apk` from GitHub Releases (release-signed by EAS; same key for every update) |
 | App type | Apps |
 | Category | Health & Fitness |
 | Target age group | 13+ (or the console's general-audience option) |
 | Privacy policy | https://cydrip.webrizen.com/privacy |
 | App website | https://cydrip.webrizen.com |
-| Support email | *to fill in* |
+| Support email | hello@webrizen.com |
 | Testing credentials | Not needed: no sign-in |
 
 ## Assets (all meet the published specs)
@@ -88,7 +88,7 @@ CyDrip is designed for general fitness and wellness only. It is not a medical de
 
 - [ ] Register at the Developer Console and verify email and mobile number
 - [ ] Organisation verification: keep PAN, CIN and (optional) GSTIN of Webrizen AI Labs Pvt Ltd ready
-- [ ] Choose a support email for the listing
+- [x] Choose a support email for the listing (hello@webrizen.com)
 - [ ] Review the auto-translations (12 Indian languages) before saving
 - [ ] Consider replacing the framed marketing screenshots with plain screenshots from a phone: the guidelines prefer actual app screens and warn against heavy device frames and text overlays
 - [ ] Review typically takes 24–72 hours; only one version can be under review at a time

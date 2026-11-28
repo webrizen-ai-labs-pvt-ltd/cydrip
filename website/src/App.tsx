@@ -103,7 +103,7 @@ export default function App() {
                 </div>
                 <div>
                   <small>Version</small>
-                  <b>1.2.0</b>
+                  <b>1.2.1</b>
                 </div>
               </div>
             </article>
@@ -173,7 +173,7 @@ export default function App() {
         <section id="inside" className="block">
           <div className="block-head">
             <span>Inside the app</span>
-            <span>Android, version 1.2.0</span>
+            <span>Android, version 1.2.1</span>
           </div>
           <div className="bento">
             <figure className="tile tile-dash">

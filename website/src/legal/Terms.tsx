@@ -1,4 +1,4 @@
-import { DOWNLOAD, ISSUES, REPO, WEBRIZEN } from '../site';
+import { DOWNLOAD, EMAIL, ISSUES, REPO, WEBRIZEN } from '../site';
 import { LegalPage, type LegalSection } from './LegalPage';
 
 const SECTIONS: LegalSection[] = [
@@ -123,8 +123,8 @@ const SECTIONS: LegalSection[] = [
     title: 'Contact',
     body: (
       <p>
-        Questions: open an issue on <a href={ISSUES}>GitHub</a> or reach Webrizen AI Labs at{' '}
-        <a href={WEBRIZEN}>webrizen.com</a>.
+        Questions: email <a href={`mailto:${EMAIL}`}>{EMAIL}</a>, open an issue on <a href={ISSUES}>GitHub</a>, or
+        visit <a href={WEBRIZEN}>webrizen.com</a>.
       </p>
     ),
   },

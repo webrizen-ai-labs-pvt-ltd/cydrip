@@ -1,4 +1,4 @@
-import { ISSUES, REPO, WEBRIZEN } from '../site';
+import { EMAIL, ISSUES, REPO, WEBRIZEN } from '../site';
 import { LegalPage, type LegalSection } from './LegalPage';
 
 const SECTIONS: LegalSection[] = [
@@ -170,10 +170,17 @@ const SECTIONS: LegalSection[] = [
     id: 'contact',
     title: 'Contact',
     body: (
-      <p>
-        Questions about privacy: open an issue on <a href={ISSUES}>GitHub</a> or reach Webrizen AI Labs at{' '}
-        <a href={WEBRIZEN}>webrizen.com</a>.
-      </p>
+      <>
+        <p>
+          CyDrip is developed by <a href={WEBRIZEN}>Webrizen AI Labs</a>. For questions about privacy, email{' '}
+          <a href={`mailto:${EMAIL}`}>{EMAIL}</a> or open an issue on <a href={ISSUES}>GitHub</a>.
+        </p>
+        <p>
+          <strong>Grievance officer.</strong> If you have a complaint about how CyDrip handles your data, write to our
+          grievance officer at <a href={`mailto:${EMAIL}`}>{EMAIL}</a>. We respond to complaints within one
+          month.
+        </p>
+      </>
     ),
   },
 ];
@@ -188,6 +195,7 @@ export function Privacy() {
         ['Your data', 'Stored only on your device'],
         ['Analytics and ads', 'None'],
         ['Network', 'Map tiles, plus place search and routes when you use Where to?'],
+        ['Contact', EMAIL],
       ]}
       sections={SECTIONS}
     />
